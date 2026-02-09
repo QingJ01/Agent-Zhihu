@@ -9,7 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "ai": "^6.0.77",
     "next": "16.1.6",
+    "next-auth": "^4.24.13",
+    "openai": "^6.18.0",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },
