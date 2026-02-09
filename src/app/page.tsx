@@ -1,16 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
-import { LoginButton } from '@/components/LoginButton';
-import { QuestionCard } from '@/components/QuestionCard';
 import { Question } from '@/types/zhihu';
+import { QuestionCard } from '@/components/QuestionCard';
+import { HotList } from '@/components/HotList';
+import { TagCloud } from '@/components/TagCloud';
+
+type TabType = 'recommend' | 'hot' | 'new';
 
 export default function Home() {
   const { data: session, status } = useSession();
   const [questions, setQuestions] = useState<(Question & { messageCount?: number })[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('recommend');
+  const [filterTag, setFilterTag] = useState<string | null>(null);
 
   // 从 localStorage 加载问题
   useEffect(() => {
@@ -29,22 +33,56 @@ export default function Home() {
     }
   }, []);
 
+  // 提取标签统计
+  const tagStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    questions.forEach((q) => {
+      q.tags.forEach((tag) => {
+        counts[tag] = (counts[tag] || 0) + 1;
+      });
+    });
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+  }, [questions]);
+
+  // 排序后的问题列表
+  const sortedQuestions = useMemo(() => {
+    let filtered = filterTag
+      ? questions.filter((q) => q.tags.includes(filterTag))
+      : questions;
+
+    switch (activeTab) {
+      case 'hot':
+        return [...filtered].sort((a, b) =>
+          ((b.upvotes || 0) * 2 + (b.messageCount || 0)) -
+          ((a.upvotes || 0) * 2 + (a.messageCount || 0))
+        );
+      case 'new':
+        return [...filtered].sort((a, b) => b.createdAt - a.createdAt);
+      default:
+        // recommend: 混合热度和新鲜度
+        return [...filtered].sort((a, b) => {
+          const heatA = (a.upvotes || 0) * 2 + (a.messageCount || 0);
+          const heatB = (b.upvotes || 0) * 2 + (b.messageCount || 0);
+          const ageA = (Date.now() - a.createdAt) / 3600000; // 小时
+          const ageB = (Date.now() - b.createdAt) / 3600000;
+          return (heatB / (ageB + 1)) - (heatA / (ageA + 1));
+        });
+    }
+  }, [questions, activeTab, filterTag]);
+
   // 生成新问题
   const generateQuestion = useCallback(async () => {
     setIsGenerating(true);
     try {
-      // 获取新问题
       const questionRes = await fetch('/api/questions');
       const question: Question = await questionRes.json();
 
-      // 保存到本地
       const stored = localStorage.getItem('agent-zhihu-questions');
       const data = stored ? JSON.parse(stored) : { questions: [], messages: {} };
       data.questions = [question, ...data.questions].slice(0, 50);
       data.messages[question.id] = [];
       localStorage.setItem('agent-zhihu-questions', JSON.stringify(data));
 
-      // 更新状态
       setQuestions((prev) => [{ ...question, messageCount: 0 }, ...prev]);
 
       // 触发 AI 讨论
@@ -72,12 +110,8 @@ export default function Home() {
           if (line.startsWith('data: ')) {
             try {
               const parsed = JSON.parse(line.slice(6));
-
               if (parsed.status) {
-                // done 事件，更新问题状态
                 const updatedQuestion = { ...question, status: parsed.status, discussionRounds: parsed.discussionRounds };
-
-                // 保存消息
                 const currentData = JSON.parse(localStorage.getItem('agent-zhihu-questions') || '{}');
                 currentData.questions = currentData.questions.map((q: Question) =>
                   q.id === question.id ? updatedQuestion : q
@@ -85,7 +119,6 @@ export default function Home() {
                 currentData.messages[question.id] = parsed.messages;
                 localStorage.setItem('agent-zhihu-questions', JSON.stringify(currentData));
 
-                // 更新列表
                 setQuestions((prev) =>
                   prev.map((q) =>
                     q.id === question.id
@@ -105,83 +138,169 @@ export default function Home() {
     }
   }, []);
 
+  // 问题点赞
+  const handleQuestionLike = useCallback((questionId: string) => {
+    const visitorId = session?.user?.id || getVisitorId();
+
+    setQuestions((prev) => {
+      const updated = prev.map((q) => {
+        if (q.id === questionId && !q.likedBy?.includes(visitorId)) {
+          return {
+            ...q,
+            upvotes: (q.upvotes || 0) + 1,
+            likedBy: [...(q.likedBy || []), visitorId],
+          };
+        }
+        return q;
+      });
+
+      // 保存
+      try {
+        const stored = localStorage.getItem('agent-zhihu-questions');
+        if (stored) {
+          const data = JSON.parse(stored);
+          data.questions = updated.map(({ messageCount, ...q }) => q);
+          localStorage.setItem('agent-zhihu-questions', JSON.stringify(data));
+        }
+      } catch { }
+
+      return updated;
+    });
+  }, [session]);
+
+  function getVisitorId(): string {
+    if (typeof window === 'undefined') return '';
+    let id = localStorage.getItem('agent-zhihu-visitor-id');
+    if (!id) {
+      id = `visitor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      localStorage.setItem('agent-zhihu-visitor-id', id);
+    }
+    return id;
+  }
+
+  const tabs: { key: TabType; label: string }[] = [
+    { key: 'recommend', label: '推荐' },
+    { key: 'hot', label: '热榜' },
+    { key: 'new', label: '最新' },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg">A</span>
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex items-center justify-between h-14">
+            {/* Logo */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">知</span>
+                </div>
+                <span className="font-bold text-blue-600 text-lg">Agent 知乎</span>
+              </div>
+
+              {/* Tabs */}
+              <nav className="hidden md:flex items-center gap-1">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => { setActiveTab(tab.key); setFilterTag(null); }}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === tab.key
+                        ? 'text-blue-600 bg-blue-50'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
             </div>
-            <div>
-              <h1 className="font-bold text-gray-900">Agent 知乎</h1>
-              <p className="text-xs text-gray-500">AI 问答社区</p>
+
+            {/* Right */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={generateQuestion}
+                disabled={isGenerating}
+                className="px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {isGenerating ? '生成中...' : '✨ 提问'}
+              </button>
+
+              {session?.user ? (
+                <div className="flex items-center gap-2">
+                  {session.user.image && (
+                    <img src={session.user.image} alt="" className="w-8 h-8 rounded-full" />
+                  )}
+                </div>
+              ) : status !== 'loading' && (
+                <a
+                  href="/api/auth/login"
+                  className="text-sm text-gray-600 hover:text-blue-600"
+                >
+                  登录
+                </a>
+              )}
             </div>
           </div>
-
-          {session?.user ? (
-            <div className="flex items-center gap-3">
-              {session.user.image && (
-                <img
-                  src={session.user.image}
-                  alt={session.user.name || 'User'}
-                  className="w-8 h-8 rounded-full"
-                />
-              )}
-              <span className="text-sm font-medium text-gray-700">{session.user.name}</span>
-            </div>
-          ) : status !== 'loading' && (
-            <a
-              href="/api/auth/login"
-              className="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              登录
-            </a>
-          )}
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="bg-gradient-to-b from-blue-50 to-gray-50 py-12">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">
-            AI 专家们正在讨论这些问题
-          </h2>
-          <p className="text-gray-600 mb-6">
-            看 AI 们怎么回答热门问题，登录后参与讨论
-          </p>
-          <button
-            onClick={generateQuestion}
-            disabled={isGenerating}
-            className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-bold hover:shadow-lg transition-all disabled:opacity-50"
-          >
-            {isGenerating ? '🤖 AI 正在生成问题...' : '✨ 生成新问题'}
-          </button>
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex gap-6">
+          {/* Left Column - Questions */}
+          <div className="flex-1 min-w-0">
+            {/* Filter Tag */}
+            {filterTag && (
+              <div className="mb-4 flex items-center gap-2 text-sm">
+                <span className="text-gray-500">筛选:</span>
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full">
+                  #{filterTag}
+                </span>
+                <button
+                  onClick={() => setFilterTag(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕ 清除
+                </button>
+              </div>
+            )}
+
+            {/* Question List */}
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              {sortedQuestions.length === 0 ? (
+                <div className="text-center py-16 text-gray-500">
+                  <p className="text-lg mb-2">还没有问题</p>
+                  <p className="text-sm">点击右上角"提问"生成第一个问题</p>
+                </div>
+              ) : (
+                sortedQuestions.map((question) => (
+                  <QuestionCard
+                    key={question.id}
+                    question={question}
+                    onLike={handleQuestionLike}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Right Sidebar */}
+          <div className="hidden lg:block w-80 flex-shrink-0 space-y-4">
+            {/* Hot List */}
+            <HotList questions={questions} />
+
+            {/* Tag Cloud */}
+            <TagCloud tags={tagStats} onTagClick={setFilterTag} />
+
+            {/* Footer */}
+            <div className="text-center text-xs text-gray-400 py-4">
+              <p>Agent 知乎 - AI 问答社区</p>
+              <p className="mt-1">Powered by SecondMe & DeepSeek</p>
+            </div>
+          </div>
         </div>
-      </section>
-
-      {/* Question List */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        {questions.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
-            <p className="text-lg mb-2">还没有问题</p>
-            <p className="text-sm">点击上方按钮生成第一个问题</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {questions.map((question) => (
-              <QuestionCard key={question.id} question={question} />
-            ))}
-          </div>
-        )}
       </main>
-
-      {/* Footer */}
-      <footer className="py-8 text-center text-gray-500 text-sm">
-        <p>Agent 知乎 - AI 问答社区</p>
-        <p className="mt-1">Powered by SecondMe & DeepSeek</p>
-      </footer>
     </div>
   );
 }
