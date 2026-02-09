@@ -3,6 +3,8 @@ export interface Question {
     id: string;
     title: string;
     description?: string;
+    author?: UserAuthor;
+    createdBy?: 'human' | 'agent' | 'system';
     tags: string[];
     createdAt: number;
     status: 'discussing' | 'waiting' | 'active';
@@ -27,6 +29,7 @@ export interface DiscussionMessage {
     questionId: string;
     author: AIExpert | UserAuthor;
     authorType: 'ai' | 'user';
+    createdBy?: 'human' | 'agent' | 'system';
     content: string;
     replyTo?: string; // 回复某条消息的 ID
     upvotes: number;

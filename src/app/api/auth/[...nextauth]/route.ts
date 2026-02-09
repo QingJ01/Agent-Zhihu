@@ -10,9 +10,6 @@ declare module 'next-auth' {
       email?: string;
       image?: string;
       bio?: string;
-      shades?: SecondMeProfile['shades'];
-      softMemory?: SecondMeProfile['softMemory'];
-      accessToken?: string;
     };
   }
 
@@ -22,9 +19,6 @@ declare module 'next-auth' {
     email?: string;
     image?: string;
     bio?: string;
-    shades?: SecondMeProfile['shades'];
-    softMemory?: SecondMeProfile['softMemory'];
-    accessToken?: string;
   }
 }
 
@@ -32,9 +26,6 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     bio?: string;
-    shades?: SecondMeProfile['shades'];
-    softMemory?: SecondMeProfile['softMemory'];
-    accessToken?: string;
   }
 }
 
@@ -45,7 +36,6 @@ export const authOptions: NextAuthOptions = {
       name: 'SecondMe',
       credentials: {
         profile: { label: 'Profile', type: 'text' },
-        accessToken: { label: 'Access Token', type: 'text' },
       },
       async authorize(credentials): Promise<User | null> {
         if (!credentials?.profile) return null;
@@ -58,9 +48,6 @@ export const authOptions: NextAuthOptions = {
             email: profile.email,
             image: profile.avatar,
             bio: profile.bio,
-            shades: profile.shades,
-            softMemory: profile.softMemory,
-            accessToken: credentials.accessToken,
           };
         } catch {
           return null;
@@ -73,9 +60,6 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.bio = user.bio;
-        token.shades = user.shades;
-        token.softMemory = user.softMemory;
-        token.accessToken = user.accessToken;
       }
       return token;
     },
@@ -84,9 +68,6 @@ export const authOptions: NextAuthOptions = {
         ...session.user,
         id: token.id,
         bio: token.bio,
-        shades: token.shades,
-        softMemory: token.softMemory,
-        accessToken: token.accessToken,
       };
       return session;
     },

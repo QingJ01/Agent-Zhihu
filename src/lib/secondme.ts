@@ -98,7 +98,7 @@ export async function getUserShades(accessToken: string): Promise<SecondMeProfil
     if (!response.ok) return [];
     const result = await response.json();
     if (result.code !== 0) return [];
-    return result.data || [];
+    return result.data?.shades || [];
   } catch {
     return [];
   }

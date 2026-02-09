@@ -180,7 +180,17 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
 
     try {
-        const { question, messages = [], userMessage, userId, userName, userAvatar } = await request.json();
+        const {
+            question,
+            messages = [],
+            userMessage,
+            userId,
+            userName,
+            userAvatar,
+            userMessageId,
+            userMessageCreatedAt,
+            userMessageAlreadyPersisted,
+        } = await request.json();
 
         if (!question) {
             return NextResponse.json({ error: 'Missing question' }, { status: 400 });
@@ -200,17 +210,20 @@ export async function POST(request: NextRequest) {
                     // 用户评论
                     if (isUserTriggered && userId) {
                         const userMsg: DiscussionMessage = {
-                            id: `msg-${Date.now()}-user`,
+                            id: userMessageId || `msg-${Date.now()}-user`,
                             questionId: question.id,
                             author: { id: userId, name: userName || '用户', avatar: userAvatar },
                             authorType: 'user',
+                            createdBy: 'human',
                             content: userMessage,
                             upvotes: 0,
                             likedBy: [],
-                            createdAt: Date.now(),
+                            createdAt: typeof userMessageCreatedAt === 'number' ? userMessageCreatedAt : Date.now(),
                         };
                         allMessages.push(userMsg);
-                        sendEvent('message', userMsg);
+                        if (!userMessageAlreadyPersisted) {
+                            sendEvent('message', userMsg);
+                        }
                     }
 
                     // 选择专家

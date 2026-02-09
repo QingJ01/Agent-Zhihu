@@ -10,12 +10,10 @@ function CallbackHandler() {
 
   useEffect(() => {
     const profile = searchParams.get('profile');
-    const accessToken = searchParams.get('accessToken');
 
-    if (profile && accessToken) {
+    if (profile) {
       signIn('secondme', {
         profile,
-        accessToken,
         callbackUrl: '/',
         redirect: true,
       });
