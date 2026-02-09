@@ -19,6 +19,7 @@ export default function QuestionPage({ params }: PageProps) {
     const [isLoading, setIsLoading] = useState(true);
     const [isTyping, setIsTyping] = useState(false);
     const [typingExpert, setTypingExpert] = useState<AIExpert | null>(null);
+    const [commentError, setCommentError] = useState<string | null>(null);
 
     // 加载问题和消息
     useEffect(() => {
@@ -42,7 +43,38 @@ export default function QuestionPage({ params }: PageProps) {
     const handleComment = useCallback(async (content: string) => {
         if (!question || !session?.user) return;
 
+        setCommentError(null);
         setIsTyping(true);
+
+        const localUserMessage: DiscussionMessage = {
+            id: `msg-${Date.now()}-user-local`,
+            questionId: question.id,
+            author: {
+                id: session.user.id,
+                name: session.user.name || '用户',
+                avatar: session.user.image || undefined,
+            },
+            authorType: 'user',
+            createdBy: 'human',
+            content,
+            upvotes: 0,
+            likedBy: [],
+            createdAt: Date.now(),
+        };
+
+        const messagesWithUser = [...messages, localUserMessage];
+        setMessages(messagesWithUser);
+
+        try {
+            const stored = localStorage.getItem('agent-zhihu-questions');
+            if (stored) {
+                const data = JSON.parse(stored);
+                data.messages[question.id] = messagesWithUser;
+                localStorage.setItem('agent-zhihu-questions', JSON.stringify(data));
+            }
+        } catch (error) {
+            console.error('Failed to persist user message locally:', error);
+        }
 
         try {
             const response = await fetch('/api/questions', {
@@ -55,6 +87,9 @@ export default function QuestionPage({ params }: PageProps) {
                     userId: session.user.id,
                     userName: session.user.name,
                     userAvatar: session.user.image,
+                    userMessageId: localUserMessage.id,
+                    userMessageCreatedAt: localUserMessage.createdAt,
+                    userMessageAlreadyPersisted: true,
                 }),
             });
 
@@ -63,7 +98,7 @@ export default function QuestionPage({ params }: PageProps) {
 
             const decoder = new TextDecoder();
             let buffer = '';
-            const newMessages: DiscussionMessage[] = [...messages];
+            const newMessages: DiscussionMessage[] = [...messagesWithUser];
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -108,6 +143,7 @@ export default function QuestionPage({ params }: PageProps) {
             }
         } catch (error) {
             console.error('Comment error:', error);
+            setCommentError('评论已保存，AI 回复失败，请稍后重试。');
         } finally {
             setIsTyping(false);
             setTypingExpert(null);
@@ -257,6 +293,12 @@ export default function QuestionPage({ params }: PageProps) {
                         <p className="text-yellow-800">
                             👋 AI 专家们已经讨论完毕，等待你的观点来激活新一轮讨论！
                         </p>
+                    </div>
+                )}
+
+                {commentError && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">
+                        {commentError}
                     </div>
                 )}
 

@@ -54,6 +54,12 @@ export function QuestionCard({ question, onLike }: QuestionCardProps) {
                     </p>
                 )}
 
+                {question.author?.name && (
+                    <p className="text-xs text-gray-500 mb-3">
+                        提问者：{question.author.name}
+                    </p>
+                )}
+
                 {/* 底部信息 */}
                 <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-4 text-gray-500">

@@ -2,22 +2,58 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
-import { Question } from '@/types/zhihu';
+import Link from 'next/link';
+import { Question, DiscussionMessage } from '@/types/zhihu';
 import { QuestionCard } from '@/components/QuestionCard';
 import { HotList } from '@/components/HotList';
 import { TagCloud } from '@/components/TagCloud';
 
 type TabType = 'recommend' | 'hot' | 'new';
 
+function extractTagsFromText(text: string): string[] {
+  const matches = [...text.matchAll(/#([\u4e00-\u9fa5A-Za-z0-9_-]{1,12})/g)];
+  const tags = matches.map((m) => m[1]);
+  const uniqueTags = Array.from(new Set(tags)).slice(0, 3);
+  return uniqueTags.length > 0 ? uniqueTags : ['讨论'];
+}
+
+function buildQuestionFromInput(content: string, author: { id: string; name: string; avatar?: string | null }): Question {
+  const trimmed = content.trim();
+  const firstLine = trimmed.split('\n')[0].trim();
+  const plainLine = firstLine.replace(/#([\u4e00-\u9fa5A-Za-z0-9_-]{1,12})/g, '').trim();
+  const title = (plainLine || trimmed).slice(0, 60);
+  const description = trimmed;
+  const tags = extractTagsFromText(trimmed);
+
+  return {
+    id: `q-${Date.now()}-user`,
+    title,
+    description,
+    tags,
+    author: {
+      id: author.id,
+      name: author.name,
+      avatar: author.avatar || undefined,
+    },
+    createdBy: 'human',
+    createdAt: Date.now(),
+    status: 'active',
+    discussionRounds: 0,
+    upvotes: 0,
+    likedBy: [],
+  };
+}
+
 export default function Home() {
   const { data: session, status } = useSession();
   const [questions, setQuestions] = useState<(Question & { messageCount?: number })[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [userQuestionInput, setUserQuestionInput] = useState('');
+  const [isSubmittingUserQuestion, setIsSubmittingUserQuestion] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('recommend');
   const [filterTag, setFilterTag] = useState<string | null>(null);
 
-  // 从 localStorage 加载问题
-  useEffect(() => {
+  const syncQuestionsFromStore = useCallback(() => {
     try {
       const stored = localStorage.getItem('agent-zhihu-questions');
       if (stored) {
@@ -32,6 +68,20 @@ export default function Home() {
       console.error('Failed to load questions:', error);
     }
   }, []);
+
+  // 从 localStorage 加载问题，并监听全局数据变更
+  useEffect(() => {
+    syncQuestionsFromStore();
+
+    const onStoreUpdated = () => {
+      syncQuestionsFromStore();
+    };
+
+    window.addEventListener('agent-zhihu-store-updated', onStoreUpdated);
+    return () => {
+      window.removeEventListener('agent-zhihu-store-updated', onStoreUpdated);
+    };
+  }, [syncQuestionsFromStore]);
 
   // 提取标签统计
   const tagStats = useMemo(() => {
@@ -168,6 +218,42 @@ export default function Home() {
     });
   }, [session]);
 
+  const submitUserQuestion = useCallback(async () => {
+    if (!session?.user?.id || !session.user.name || !userQuestionInput.trim() || isSubmittingUserQuestion) return;
+
+    setIsSubmittingUserQuestion(true);
+    try {
+      const stored = localStorage.getItem('agent-zhihu-questions');
+      const store = stored ? JSON.parse(stored) : { questions: [], messages: {} as Record<string, DiscussionMessage[]> };
+
+      const question = buildQuestionFromInput(userQuestionInput, {
+        id: session.user.id,
+        name: session.user.name,
+        avatar: session.user.image,
+      });
+
+      const nextStore = {
+        questions: [question, ...(store.questions || [])].slice(0, 50),
+        messages: {
+          ...(store.messages || {}),
+          [question.id]: [],
+        } as Record<string, DiscussionMessage[]>,
+      };
+
+      localStorage.setItem('agent-zhihu-questions', JSON.stringify(nextStore));
+      setQuestions(nextStore.questions.map((q: Question) => ({
+        ...q,
+        messageCount: (nextStore.messages[q.id] || []).length,
+      })));
+      setUserQuestionInput('');
+      setActiveTab('new');
+    } catch (error) {
+      console.error('Submit question error:', error);
+    } finally {
+      setIsSubmittingUserQuestion(false);
+    }
+  }, [session, userQuestionInput, isSubmittingUserQuestion]);
+
   function getVisitorId(): string {
     if (typeof window === 'undefined') return '';
     let id = localStorage.getItem('agent-zhihu-visitor-id');
@@ -218,6 +304,15 @@ export default function Home() {
 
             {/* Right */}
             <div className="flex items-center gap-4">
+              {session?.user && (
+                <Link
+                  href="/logs"
+                  className="px-4 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-200 transition-colors"
+                >
+                  日志
+                </Link>
+              )}
+
               <button
                 onClick={generateQuestion}
                 disabled={isGenerating}
@@ -247,6 +342,27 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {session?.user && (
+          <div className="mb-4 bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-sm text-gray-600 mb-3">你来提问：输入你的问题，系统会保存在当前列表中（可带 #标签）</p>
+            <div className="flex gap-3">
+              <input
+                value={userQuestionInput}
+                onChange={(e) => setUserQuestionInput(e.target.value)}
+                placeholder="比如：为什么很多人知道道理却依然过不好这一生？ #心理学 #成长"
+                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={submitUserQuestion}
+                disabled={!userQuestionInput.trim() || isSubmittingUserQuestion}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSubmittingUserQuestion ? '发布中...' : '发布问题'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-6">
           {/* Left Column - Questions */}
           <div className="flex-1 min-w-0">
