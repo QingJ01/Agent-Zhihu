@@ -20,26 +20,77 @@ export default function QuestionPage({ params }: PageProps) {
     const [isTyping, setIsTyping] = useState(false);
     const [typingExpert, setTypingExpert] = useState<AIExpert | null>(null);
     const [commentError, setCommentError] = useState<string | null>(null);
-    const [replyTo, setReplyTo] = useState<DiscussionMessage | null>(null);
 
-    // 加载问题和消息
+    // 加载问题和消息（优先从服务器加载）
     useEffect(() => {
-        try {
-            const stored = localStorage.getItem('agent-zhihu-questions');
-            if (stored) {
-                const data = JSON.parse(stored);
-                // Fix: ensure messageCount is loaded if available, or just use question object
-                const q = data.questions?.find((q: Question) => q.id === id);
-                if (q) {
-                    const msgs = data.messages?.[id] || [];
-                    setQuestion({ ...q, messageCount: msgs.length });
-                    setMessages(msgs);
+        const loadQuestion = async () => {
+            try {
+                // 先从服务器加载
+                const response = await fetch(`/api/questions/${id}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.question) {
+                        setQuestion(data.question);
+                        setMessages(data.messages || []);
+
+                        // 保存到 localStorage 作为缓存
+                        const stored = localStorage.getItem('agent-zhihu-questions');
+                        const localData = stored ? JSON.parse(stored) : { questions: [], messages: {} };
+
+                        // 更新或添加问题到本地缓存
+                        const questionIndex = localData.questions.findIndex((q: Question) => q.id === id);
+                        if (questionIndex >= 0) {
+                            localData.questions[questionIndex] = data.question;
+                        } else {
+                            localData.questions.push(data.question);
+                        }
+                        localData.messages[id] = data.messages || [];
+
+                        localStorage.setItem('agent-zhihu-questions', JSON.stringify(localData));
+                        setIsLoading(false);
+                        return;
+                    }
                 }
+            } catch (error) {
+                console.error('Failed to load from server:', error);
             }
-        } catch (error) {
-            console.error('Failed to load question:', error);
-        }
-        setIsLoading(false);
+
+            // 如果服务器加载失败，回退到 localStorage
+            try {
+                const stored = localStorage.getItem('agent-zhihu-questions');
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    const q = data.questions?.find((q: Question) => q.id === id);
+                    if (q) {
+                        setQuestion(q);
+                        setMessages(data.messages?.[id] || []);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load from localStorage:', error);
+            }
+
+            setIsLoading(false);
+        };
+
+        loadQuestion();
+
+        // 自动轮询：每20秒从服务器刷新一次消息
+        const pollInterval = setInterval(() => {
+            fetch(`/api/questions/${id}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.question) {
+                        setQuestion(data.question);
+                        setMessages(data.messages || []);
+                    }
+                })
+                .catch(err => console.error('Poll error:', err));
+        }, 20000); // 20秒
+
+        return () => {
+            clearInterval(pollInterval);
+        };
     }, [id]);
 
     // 提交评论
@@ -60,7 +111,6 @@ export default function QuestionPage({ params }: PageProps) {
             authorType: 'user',
             createdBy: 'human',
             content,
-            replyTo: replyTo?.id,
             upvotes: 0,
             likedBy: [],
             createdAt: Date.now(),
@@ -94,7 +144,6 @@ export default function QuestionPage({ params }: PageProps) {
                     userMessageId: localUserMessage.id,
                     userMessageCreatedAt: localUserMessage.createdAt,
                     userMessageAlreadyPersisted: true,
-                    replyToId: replyTo?.id,
                 }),
             });
 
@@ -150,22 +199,10 @@ export default function QuestionPage({ params }: PageProps) {
             console.error('Comment error:', error);
             setCommentError('评论已保存，AI 回复失败，请稍后重试。');
         } finally {
+            setIsTyping(false);
             setTypingExpert(null);
-            setReplyTo(null); // 清除回复状态
         }
-    }, [question, messages, session, replyTo]);
-
-    // 处理回复点击
-    const handleReply = useCallback((message: DiscussionMessage) => {
-        setReplyTo(message);
-        // 滚动到评论框
-        document.getElementById('comment-input')?.scrollIntoView({ behavior: 'smooth' });
-    }, []);
-
-    // 取消回复
-    const cancelReply = useCallback(() => {
-        setReplyTo(null);
-    }, []);
+    }, [question, messages, session]);
 
     // 处理点赞
     const handleLike = useCallback((messageId: string) => {
@@ -253,61 +290,40 @@ export default function QuestionPage({ params }: PageProps) {
             </header>
 
             {/* Question */}
-            {/* Question Header */}
-            <div className="bg-white shadow-sm mb-3">
-                <div className="max-w-[1000px] mx-auto px-4 py-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        {(question.tags || []).map((tag) => (
-                            <span key={tag} className="px-3 py-1 bg-[#EBF5FF] text-[#0066FF] rounded-full text-sm font-medium hover:bg-[#d9efff] cursor-pointer">
+            <main className="max-w-4xl mx-auto px-4 py-8">
+                <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+                    <div className="flex items-start justify-between gap-4">
+                        <h1 className="text-2xl font-bold text-gray-900">{question.title}</h1>
+                        <span className="flex-shrink-0 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                            {statusText[question.status]}
+                        </span>
+                    </div>
+                    {question.description && (
+                        <p className="mt-4 text-gray-600">{question.description}</p>
+                    )}
+                    <div className="mt-4 flex gap-2">
+                        {question.tags.map((tag) => (
+                            <span key={tag} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-sm">
                                 {tag}
                             </span>
                         ))}
                     </div>
-                    <h1 className="text-[26px] font-bold text-[#121212] mb-4 leading-tight">
-                        {question.title}
-                    </h1>
-                    {question.description && (
-                        <div className="text-[15px] text-[#121212] leading-7">
-                            {question.description}
-                        </div>
-                    )}
-
-                    <div className="flex items-center gap-4 mt-6">
-                        <button className="px-4 py-1.5 bg-[#0066FF] text-white rounded-[3px] font-medium hover:bg-[#005ce6]">
-                            写回答
-                        </button>
-                        <button className="px-4 py-1.5 border border-[#0066FF] text-[#0066FF] rounded-[3px] font-medium hover:bg-[#EBF5FF]">
-                            邀请回答
-                        </button>
-                        <div className="flex-1" />
-                        <span className="text-sm text-gray-400">
-                            {question.messageCount || 0} 条评论
-                        </span>
-                    </div>
                 </div>
-            </div>
 
-            {/* Main Content */}
-            <main className="max-w-[1000px] mx-auto px-4 pb-20 flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                    {/* Discussion List */}
-                    <div className="bg-white rounded-[2px] shadow-sm mb-4">
-                        <div className="px-5 py-3 border-b border-gray-100 flex justify-between items-center">
-                            <span className="font-semibold text-gray-800">{messages.length} 个回答</span>
-                            <div className="text-sm text-gray-400">默认排序</div>
-                        </div>
-                        <div>
-                            {messages.map((message) => (
-                                <AnswerCard
-                                    key={message.id}
-                                    message={message}
-                                    allMessages={messages}
-                                    onLike={handleLike}
-                                    onReply={handleReply}
-                                />
-                            ))}
-                        </div>
-                    </div>
+                {/* Discussion */}
+                <div className="space-y-4 mb-6">
+                    <h2 className="text-lg font-semibold text-gray-800">
+                        {messages.length} 条讨论
+                    </h2>
+
+                    {messages.map((message) => (
+                        <AnswerCard
+                            key={message.id}
+                            message={message}
+                            allMessages={messages}
+                            onLike={handleLike}
+                        />
+                    ))}
 
                     {isTyping && typingExpert && (
                         <AnswerCard
@@ -323,74 +339,32 @@ export default function QuestionPage({ params }: PageProps) {
                             isTyping
                         />
                     )}
-
-                    {/* Comment Input */}
-                    {question.status === 'waiting' && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
-                            <p className="text-yellow-800">
-                                👋 AI 专家们已经讨论完毕，等待你的观点来激活新一轮讨论！
-                            </p>
-                        </div>
-                    )}
-
-                    {commentError && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">
-                            {commentError}
-                        </div>
-                    )}
-
-                    {/* Reply Context UI */}
-                    {replyTo && (
-                        <div className="bg-blue-50 border border-blue-100 rounded-t-xl px-4 py-2 flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm text-blue-700">
-                                <span>↩️ 正在回复</span>
-                                <span className="font-bold">
-                                    @{replyTo.authorType === 'ai'
-                                        ? (replyTo.author as AIExpert).name
-                                        : (replyTo.author as { name: string }).name}
-                                </span>
-                            </div>
-                            <button
-                                onClick={cancelReply}
-                                className="text-xs text-blue-500 hover:text-blue-700 hover:underline"
-                            >
-                                取消回复
-                            </button>
-                        </div>
-                    )}
-
-                    <div id="comment-input" className={replyTo ? 'rounded-b-xl overflow-hidden' : ''}>
-                        <CommentInput
-                            onSubmit={handleComment}
-                            disabled={isTyping}
-                            placeholder={
-                                replyTo
-                                    ? `回复 @${replyTo.authorType === 'ai' ? (replyTo.author as AIExpert).name : (replyTo.author as { name: string }).name}...`
-                                    : question.status === 'waiting'
-                                        ? '发表你的观点，AI 将回应你的评论...'
-                                        : '参与讨论，发表你的看法...'
-                            }
-                        />
-                    </div>
                 </div>
 
-                {/* Right Sidebar */}
-                <div className="hidden lg:block w-[296px] flex-shrink-0">
-                    <div className="bg-white p-4 rounded-[2px] shadow-sm sticky top-20">
-                        <div className="font-medium mb-3">关于作者</div>
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded bg-gray-200"></div>
-                            <div className="text-sm">
-                                <div className="font-bold">Agent Bot</div>
-                                <div className="text-gray-500">优秀回答者</div>
-                            </div>
-                        </div>
-                        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between text-sm text-gray-500">
-                            <span>关注者 12</span>
-                            <span>被赞同 8</span>
-                        </div>
+                {/* Comment Input */}
+                {question.status === 'waiting' && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-4">
+                        <p className="text-yellow-800">
+                            👋 AI 专家们已经讨论完毕，等待你的观点来激活新一轮讨论！
+                        </p>
                     </div>
-                </div>
+                )}
+
+                {commentError && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">
+                        {commentError}
+                    </div>
+                )}
+
+                <CommentInput
+                    onSubmit={handleComment}
+                    disabled={isTyping}
+                    placeholder={
+                        question.status === 'waiting'
+                            ? '发表你的观点，AI 将回应你的评论...'
+                            : '参与讨论，发表你的看法...'
+                    }
+                />
             </main>
         </div>
     );

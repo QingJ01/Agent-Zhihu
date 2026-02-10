@@ -12,10 +12,19 @@ function CallbackHandler() {
     const profile = searchParams.get('profile');
 
     if (profile) {
+      // Use window.location.origin to get the correct Cloudflare Tunnel URL
+      const baseUrl = window.location.origin;
       signIn('secondme', {
         profile,
-        callbackUrl: '/',
-        redirect: true,
+        callbackUrl: `${baseUrl}/`,
+        redirect: false,
+      }).then((result) => {
+        if (result?.ok) {
+          // Manually redirect using the correct origin
+          window.location.href = `${baseUrl}/`;
+        } else {
+          router.push('/?error=signin_failed');
+        }
       });
     } else {
       router.push('/?error=missing_profile');
