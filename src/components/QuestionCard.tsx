@@ -9,18 +9,6 @@ interface QuestionCardProps {
 }
 
 export function QuestionCard({ question, onLike }: QuestionCardProps) {
-    const statusText = {
-        discussing: '🤖 讨论中',
-        waiting: '💬 等你参与',
-        active: '🔥 热议',
-    };
-
-    const statusColor = {
-        discussing: 'bg-blue-50 text-blue-600',
-        waiting: 'bg-amber-50 text-amber-600',
-        active: 'bg-red-50 text-red-600',
-    };
-
     const handleLike = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -28,56 +16,43 @@ export function QuestionCard({ question, onLike }: QuestionCardProps) {
     };
 
     return (
-        <div className="bg-white hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0">
-            <Link href={`/question/${question.id}`} className="block p-5">
-                {/* 状态标签 */}
-                <div className="flex items-center gap-2 mb-2">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColor[question.status]}`}>
-                        {statusText[question.status]}
-                    </span>
-                    {question.tags.slice(0, 2).map((tag) => (
-                        <span key={tag} className="text-xs text-gray-500">
-                            #{tag}
-                        </span>
-                    ))}
-                </div>
-
-                {/* 标题 */}
-                <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors mb-2 line-clamp-2">
+        <div className="p-4 border-b border-gray-100 hover:bg-gray-50/50 transition-colors bg-white">
+            <Link href={`/question/${question.id}`} className="block">
+                {/* Title */}
+                <h2 className="text-[18px] font-bold text-[#121212] leading-snug mb-2 hover:text-[#175199]">
                     {question.title}
-                </h3>
+                </h2>
 
-                {/* 描述 */}
+                {/* Body/Preview */}
                 {question.description && (
-                    <p className="text-gray-600 text-sm line-clamp-2 mb-3">
+                    <div className="text-[15px] text-[#444] leading-relaxed mb-2 line-clamp-2 hover:text-[#646464]">
                         {question.description}
-                    </p>
-                )}
-
-                {question.author?.name && (
-                    <p className="text-xs text-gray-500 mb-3">
-                        提问者：{question.author.name}
-                    </p>
-                )}
-
-                {/* 底部信息 */}
-                <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-4 text-gray-500">
-                        <span>{question.messageCount || 0} 讨论</span>
-                        <span>{formatTime(question.createdAt)}</span>
                     </div>
+                )}
 
-                    {/* 点赞按钮 */}
+                {/* Footer / Actions */}
+                <div className="flex items-center gap-4 mt-3">
+                    {/* Vote Button */}
                     <button
                         onClick={handleLike}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full transition-all ${question.likedBy?.length
-                                ? 'bg-blue-50 text-blue-600'
-                                : 'bg-gray-50 text-gray-500 hover:bg-blue-50 hover:text-blue-600'
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[3px] text-sm font-medium transition-colors ${question.likedBy?.length
+                                ? 'bg-[#0066FF] text-white'
+                                : 'bg-[#EBF5FF] text-[#0066FF] hover:bg-[#d9efff]'
                             }`}
                     >
-                        <span>👍</span>
-                        <span className="font-medium">{question.upvotes || 0}</span>
+                        <span className="text-[10px]">▲</span>
+                        <span>{question.likedBy?.length ? `已赞同 ${question.upvotes}` : `赞同 ${question.upvotes || ''}`}</span>
                     </button>
+
+                    <button className="flex items-center gap-1.5 text-sm text-[#8590A6] hover:text-[#76839b] transition-colors">
+                        <span className="text-lg">💬</span>
+                        <span>{question.messageCount ? `${question.messageCount} 条评论` : '添加评论'}</span>
+                    </button>
+
+                    <div className="flex items-center gap-1 text-sm text-[#8590A6]">
+                        <span>•</span>
+                        <span>{question.status === 'discussing' ? 'AI 正在热议' : formatTime(question.createdAt)}</span>
+                    </div>
                 </div>
             </Link>
         </div>

@@ -9,9 +9,10 @@ interface AnswerCardProps {
     isTyping?: boolean;
     allMessages?: DiscussionMessage[];
     onLike?: (messageId: string) => void;
+    onReply?: (message: DiscussionMessage) => void;
 }
 
-export function AnswerCard({ message, isTyping, allMessages, onLike }: AnswerCardProps) {
+export function AnswerCard({ message, isTyping, allMessages, onLike, onReply }: AnswerCardProps) {
     const { data: session } = useSession();
     const [isLiked, setIsLiked] = useState(() => {
         const visitorId = session?.user?.id || getVisitorId();
@@ -46,87 +47,73 @@ export function AnswerCard({ message, isTyping, allMessages, onLike }: AnswerCar
     }, [isTyping, isLiked, message.id, onLike]);
 
     return (
-        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-            {/* 回复标记 */}
-            {replyToName && (
-                <div className="mb-3 text-sm text-gray-500 flex items-center gap-1">
-                    <span>↩️ 回复</span>
-                    <span className="font-medium text-gray-700">@{replyToName}</span>
-                    {replyToMessage && (
-                        <span className="text-gray-400 truncate max-w-[200px]">
-                            : {replyToMessage.content.slice(0, 30)}...
-                        </span>
+        <div className="bg-white p-5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/30 transition-colors">
+            {/* Top Author Bar */}
+            <div className="flex items-center gap-3 mb-3">
+                <div className="relative">
+                    {avatar ? (
+                        <img src={avatar} alt={name} className="w-9 h-9 rounded-[4px] object-cover bg-gray-200" />
+                    ) : (
+                        <div className={`w-9 h-9 rounded-[4px] flex items-center justify-center text-white font-bold text-sm ${isAI ? 'bg-[#0066FF]' : 'bg-gray-400'}`}>
+                            {name.charAt(0)}
+                        </div>
                     )}
+                </div>
+                <div>
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-[15px] text-[#121212]">{name}</span>
+                        {isAI && <span className="text-[12px] bg-blue-100 text-blue-600 px-1 rounded-sm">AI 认证</span>}
+                    </div>
+                    {title && <div className="text-[14px] text-[#646464]">{title}</div>}
+                </div>
+            </div>
+
+            {/* Reply Context */}
+            {replyToName && (
+                <div className="text-[14px] text-[#8590A6] mb-2 pl-3 border-l-2 border-gray-200">
+                    回复 <span className="font-medium text-gray-600">@{replyToName}</span>
+                    {replyToMessage && <span className="opacity-80">: {replyToMessage.content.slice(0, 20)}...</span>}
                 </div>
             )}
 
-            {/* 作者信息 */}
-            <div className="flex items-center gap-3 mb-4">
-                <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold ${isAI
-                            ? 'bg-gradient-to-br from-blue-500 to-purple-600'
-                            : 'bg-gradient-to-br from-green-500 to-teal-600'
-                        }`}
-                >
-                    {avatar ? (
-                        <img src={avatar} alt={name} className="w-full h-full rounded-full object-cover" />
-                    ) : (
-                        name.charAt(0)
-                    )}
-                </div>
-                <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900">{name}</span>
-                        {isAI && (
-                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">AI</span>
-                        )}
-                    </div>
-                    <p className="text-sm text-gray-500">{title}</p>
-                </div>
-                <span className="text-sm text-gray-400">{formatTime(message.createdAt)}</span>
-            </div>
-
-            {/* 内容 */}
-            <div className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+            {/* Content */}
+            <div className={`text-[15px] leading-7 text-[#121212] mb-4 ${isTyping ? 'animate-pulse' : ''}`}>
                 {isTyping ? (
-                    <div className="flex items-center gap-2 text-gray-400">
-                        <span className="animate-pulse">正在输入</span>
-                        <span className="flex gap-1">
-                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                        </span>
-                    </div>
+                    '正在生成回答...'
                 ) : (
                     message.content
                 )}
             </div>
 
-            {/* 互动按钮 */}
+            {/* Bottom Actions */}
             {!isTyping && (
-                <div className="mt-4 flex items-center gap-6 text-sm text-gray-500">
+                <div className="flex items-center gap-4">
                     <button
                         onClick={handleLike}
-                        disabled={isLiked}
-                        className={`flex items-center gap-1 transition-colors ${isLiked
-                                ? 'text-blue-600 cursor-default'
-                                : 'hover:text-blue-600 cursor-pointer'
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[3px] text-sm font-medium transition-colors ${isLiked
+                                ? 'bg-[#0066FF] text-white'
+                                : 'bg-[#EBF5FF] text-[#0066FF] hover:bg-[#d9efff]'
                             }`}
                     >
-                        <span>{isLiked ? '👍' : '👍'}</span>
-                        <span>{likeCount}</span>
-                        {message.likedBy && message.likedBy.length > 0 && (
-                            <span className="text-xs text-gray-400 ml-1">
-                                ({message.likedBy.length}人)
-                            </span>
-                        )}
+                        <span className="text-[10px]">▲</span>
+                        <span>{isLiked ? `已赞同 ${likeCount}` : `赞同 ${likeCount}`}</span>
                     </button>
-                    <button className="hover:text-blue-600 transition-colors">
-                        回复
+
+                    <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-[3px] text-sm text-[#8590A6] hover:text-[#646464] hover:bg-gray-100 transition-colors">
+                        <span className="text-[10px]">▼</span>
                     </button>
-                    <button className="hover:text-blue-600 transition-colors">
-                        分享
+
+                    <button
+                        onClick={() => onReply?.(message)}
+                        className="flex items-center gap-1 text-sm text-[#8590A6] hover:text-[#646464] px-2 py-1"
+                    >
+                        <span className="text-[14px]">💬</span>
+                        <span>{replyToName ? '查看对话' : '回复'}</span>
                     </button>
+
+                    <span className="text-sm text-[#8590A6] ml-auto">
+                        {formatTime(message.createdAt)}
+                    </span>
                 </div>
             )}
         </div>

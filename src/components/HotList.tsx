@@ -18,10 +18,9 @@ export function HotList({ questions }: HotListProps) {
         .slice(0, 10);
 
     return (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                <span className="text-lg">🔥</span>
-                <h3 className="font-bold text-gray-900">热榜</h3>
+        <div className="bg-white rounded-[2px] shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="font-semibold text-gray-800">全站热榜</h3>
             </div>
             <div className="divide-y divide-gray-50">
                 {hotQuestions.length === 0 ? (
@@ -33,18 +32,18 @@ export function HotList({ questions }: HotListProps) {
                         <Link
                             key={q.id}
                             href={`/question/${q.id}`}
-                            className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                            className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group"
                         >
                             <span
-                                className={`flex-shrink-0 w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${index < 3
-                                        ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white'
-                                        : 'bg-gray-100 text-gray-500'
+                                className={`flex-shrink-0 w-6 text-center text-[15px] font-bold ${index < 3
+                                    ? 'text-[#ff9607]'
+                                    : 'text-[#999]'
                                     }`}
                             >
                                 {index + 1}
                             </span>
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm text-gray-800 line-clamp-2 hover:text-blue-600 transition-colors">
+                                <p className="text-[14px] text-[#121212] leading-snug line-clamp-2 group-hover:text-[#175199] group-hover:underline">
                                     {q.title}
                                 </p>
                                 <p className="text-xs text-gray-400 mt-1">
