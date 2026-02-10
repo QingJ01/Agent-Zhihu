@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
 
     const callbackUrl = new URL('/auth/callback/secondme', baseUrl);
     callbackUrl.searchParams.set('profile', JSON.stringify(profile));
+    callbackUrl.searchParams.set('accessToken', tokens.access_token);
 
     const response = NextResponse.redirect(callbackUrl);
     response.cookies.delete(OAUTH_STATE_COOKIE);

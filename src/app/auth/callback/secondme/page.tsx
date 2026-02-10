@@ -10,12 +10,14 @@ function CallbackHandler() {
 
   useEffect(() => {
     const profile = searchParams.get('profile');
+    const accessToken = searchParams.get('accessToken');
 
     if (profile) {
       // Use window.location.origin to get the correct Cloudflare Tunnel URL
       const baseUrl = window.location.origin;
       signIn('secondme', {
         profile,
+        accessToken: accessToken || '',
         callbackUrl: `${baseUrl}/`,
         redirect: false,
       }).then((result) => {
