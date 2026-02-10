@@ -373,11 +373,11 @@ export default function Home() {
               </button>
 
               {session?.user ? (
-                <div className="flex items-center gap-2">
+                <Link href="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                   {session.user.image && (
-                    <img src={session.user.image} alt="" className="w-8 h-8 rounded-full" />
+                    <img src={session.user.image} alt="" className="w-8 h-8 rounded-full hover:ring-2 hover:ring-blue-400 transition-all" />
                   )}
-                </div>
+                </Link>
               ) : status !== 'loading' && (
                 <a
                   href="/api/auth/login"

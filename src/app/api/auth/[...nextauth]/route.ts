@@ -10,6 +10,7 @@ declare module 'next-auth' {
       email?: string;
       image?: string;
       bio?: string;
+      accessToken?: string;
     };
   }
 
@@ -19,6 +20,7 @@ declare module 'next-auth' {
     email?: string;
     image?: string;
     bio?: string;
+    accessToken?: string;
   }
 }
 
@@ -26,6 +28,7 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     bio?: string;
+    accessToken?: string;
   }
 }
 
@@ -36,6 +39,7 @@ export const authOptions: NextAuthOptions = {
       name: 'SecondMe',
       credentials: {
         profile: { label: 'Profile', type: 'text' },
+        accessToken: { label: 'Access Token', type: 'text' },
       },
       async authorize(credentials): Promise<User | null> {
         if (!credentials?.profile) return null;
@@ -48,6 +52,7 @@ export const authOptions: NextAuthOptions = {
             email: profile.email,
             image: profile.avatar,
             bio: profile.bio,
+            accessToken: credentials.accessToken || undefined,
           };
         } catch {
           return null;
@@ -60,6 +65,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.bio = user.bio;
+        token.accessToken = user.accessToken;
       }
       return token;
     },
@@ -68,6 +74,7 @@ export const authOptions: NextAuthOptions = {
         ...session.user,
         id: token.id,
         bio: token.bio,
+        accessToken: token.accessToken,
       };
       return session;
     },
