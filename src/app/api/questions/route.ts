@@ -11,6 +11,23 @@ const openai = new OpenAI({
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DISCUSSION_ROUNDS = 4;
 
+const FALLBACK_QUESTIONS = [
+    { title: 'AI 会取代人类的工作吗？', description: '随着 ChatGPT 等 AI 工具的普及，越来越多的人开始担心自己的工作会被 AI 取代。', tags: ['人工智能', '职业发展', '未来'] },
+    { title: '35岁程序员真的会被淘汰吗？', description: '互联网行业似乎对年龄格外敏感，35岁成了一道隐形的门槛。这合理吗？', tags: ['职场', '程序员', '年龄焦虑'] },
+    { title: '为什么现在的年轻人越来越不想结婚了？', description: '结婚率持续走低，年轻人对婚姻的态度发生了巨大变化，这背后的原因是什么？', tags: ['婚姻', '社会', '年轻人'] },
+    { title: '读研三年不如工作三年？', description: '每年考研人数不断攀升，但也有越来越多的声音质疑读研的价值。你怎么看？', tags: ['教育', '考研', '职业规划'] },
+    { title: '大城市的房价还会涨吗？', description: '房价问题一直是社会讨论的焦点，各种政策频出，未来走势会怎样？', tags: ['房价', '经济', '生活'] },
+    { title: '短视频正在毁掉我们的注意力吗？', description: '刷短视频越来越停不下来，看书看不进去，这是不是一种新型的「数字毒品」？', tags: ['科技', '心理', '社交媒体'] },
+    { title: '内卷到底有没有尽头？', description: '从教育到职场，内卷无处不在。我们有可能从这种恶性竞争中走出来吗？', tags: ['社会', '内卷', '竞争'] },
+    { title: '人工智能有可能产生意识吗？', description: '从哲学到科学，人们对AI是否能拥有真正的意识争论不休。', tags: ['人工智能', '哲学', '科学'] },
+    { title: '远程办公会成为未来的主流吗？', description: '疫情后很多公司开始推行远程办公，但也有不少公司要求回归线下。', tags: ['职场', '远程办公', '未来'] },
+    { title: '为什么「躺平」成了一种流行文化？', description: '从拼命努力到选择躺平，年轻人的心态发生了怎样的转变？', tags: ['社会', '年轻人', '文化'] },
+];
+
+function getRandomFallback() {
+    return FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)];
+}
+
 // 生成问题
 async function generateQuestion(): Promise<{ title: string; description: string; tags: string[] }> {
     const response = await openai.chat.completions.create({
@@ -19,13 +36,9 @@ async function generateQuestion(): Promise<{ title: string; description: string;
             {
                 role: 'system',
                 content: `你是一个知乎热门问题生成器。生成一个有深度、有争议性的问题。
-        
-输出 JSON 格式：
-{
-  "title": "问题标题（简洁有力，像知乎热门问题）",
-  "description": "问题描述（补充背景，50-100字）",
-  "tags": ["标签1", "标签2", "标签3"]
-}
+
+请直接输出 JSON（不要用 markdown 代码块包裹），格式如下：
+{"title": "问题标题", "description": "问题描述（50-100字）", "tags": ["标签1", "标签2", "标签3"]}
 
 要求：
 - 问题要有讨论价值，不是简单的事实问题
@@ -38,17 +51,35 @@ async function generateQuestion(): Promise<{ title: string; description: string;
         temperature: 1.0,
     });
 
-    const content = response.choices[0]?.message?.content || '{}';
-    try {
-        const match = content.match(/\{[\s\S]*\}/);
-        if (match) return JSON.parse(match[0]);
-    } catch { }
+    const content = response.choices[0]?.message?.content || '';
+    console.log('[generateQuestion] LLM raw response:', content);
 
-    return {
-        title: 'AI 会取代人类的工作吗？',
-        description: '随着 ChatGPT 等 AI 工具的普及，越来越多的人开始担心自己的工作会被 AI 取代。',
-        tags: ['人工智能', '职业发展', '未来'],
-    };
+    if (!content.trim()) {
+        console.warn('[generateQuestion] Empty LLM response, using fallback');
+        return getRandomFallback();
+    }
+
+    try {
+        // 先尝试去掉 markdown 代码块
+        const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+            const parsed = JSON.parse(match[0]);
+            // 校验 title 非空
+            if (parsed.title && typeof parsed.title === 'string' && parsed.title.trim()) {
+                return {
+                    title: parsed.title.trim(),
+                    description: (parsed.description || '').trim(),
+                    tags: Array.isArray(parsed.tags) ? parsed.tags : ['讨论'],
+                };
+            }
+            console.warn('[generateQuestion] Parsed JSON but title is empty:', parsed);
+        }
+    } catch (e) {
+        console.warn('[generateQuestion] JSON parse failed:', e);
+    }
+
+    return getRandomFallback();
 }
 
 // 决定回复目标：问题本身还是某条消息
@@ -190,6 +221,7 @@ export async function POST(request: NextRequest) {
             userMessageId,
             userMessageCreatedAt,
             userMessageAlreadyPersisted,
+            replyToId,
         } = await request.json();
 
         if (!question) {
@@ -219,6 +251,7 @@ export async function POST(request: NextRequest) {
                             upvotes: 0,
                             likedBy: [],
                             createdAt: typeof userMessageCreatedAt === 'number' ? userMessageCreatedAt : Date.now(),
+                            replyTo: replyToId,
                         };
                         allMessages.push(userMsg);
                         if (!userMessageAlreadyPersisted) {
@@ -226,10 +259,36 @@ export async function POST(request: NextRequest) {
                         }
                     }
 
-                    // 选择专家
-                    const experts = isUserTriggered
-                        ? getRandomExperts(2, allMessages.filter(m => m.authorType === 'ai').map(m => (m.author as AIExpert).id))
-                        : selectExperts(question.tags, 4);
+                    // 确定回复目标和专家列表
+                    let experts: AIExpert[] = [];
+                    let firstRoundTarget: DiscussionMessage | null = null;
+
+                    // 如果用户指定了回复对象（回复某个 AI）
+                    if (isUserTriggered && replyToId) {
+                        const targetMsg = allMessages.find(m => m.id === replyToId);
+                        if (targetMsg && targetMsg.authorType === 'ai') {
+                            // 找到被回复的专家
+                            const expertId = (targetMsg.author as AIExpert).id;
+                            const expert = AI_EXPERTS.find(e => e.id === expertId);
+                            if (expert) {
+                                // 强制该专家排在第一位
+                                experts = [expert];
+                                // 再随机选一个配合
+                                const otherExperts = selectExperts(question.tags || [], 5).filter(e => e.id !== expertId);
+                                if (otherExperts.length > 0) {
+                                    experts.push(otherExperts[0]);
+                                }
+                                firstRoundTarget = targetMsg;
+                            }
+                        }
+                    }
+
+                    // 如果没有指定回复对象，或未找到专家，则按原逻辑选择
+                    if (experts.length === 0) {
+                        experts = isUserTriggered
+                            ? getRandomExperts(2, allMessages.filter(m => m.authorType === 'ai').map(m => (m.author as AIExpert).id))
+                            : selectExperts(question.tags || [], 4);
+                    }
 
                     // 逐个生成回复
                     const rounds = isUserTriggered ? 2 : DISCUSSION_ROUNDS;
@@ -241,7 +300,23 @@ export async function POST(request: NextRequest) {
                         sendEvent('typing', { expert });
 
                         // 决定回复目标
-                        const { target } = decideReplyTarget(allMessages);
+                        // 第一轮如果是用户触发且有明确回复对象，则强制回复用户（上下文是用户回复了AI）
+                        // 逻辑调整：用户回复了AI，AI应该回应用户的这条回复。
+                        // 所以 target 应该是用户的这条 userMsg。
+                        // 但 generateExpertResponse 需要知道 "User replied to AI"。
+                        // 我们 passed isReplyToUser=true。
+                        // decideReplyTarget 会返回 recent message (userMsg).
+
+                        let target: DiscussionMessage | null = null;
+
+                        if (round === 0 && isUserTriggered) {
+                            // 第一轮，AI 必须回复用户的新消息
+                            target = allMessages[allMessages.length - 1]; // userMsg
+                        } else {
+                            // 后续轮次，正常逻辑
+                            const decision = decideReplyTarget(allMessages);
+                            target = decision.target;
+                        }
 
                         // 生成回复
                         const { content, shouldLike } = await generateExpertResponse(

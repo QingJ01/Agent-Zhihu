@@ -11,6 +11,7 @@ export interface Question {
     discussionRounds: number;
     upvotes?: number; // 问题点赞数
     likedBy?: string[]; // 点赞者 ID
+    messageCount?: number; // 评论/回答数
 }
 
 // AI 专家

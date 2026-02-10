@@ -62,21 +62,26 @@ async function generateAgentQuestion(actor: UserAuthor): Promise<{ title: string
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) {
       const parsed = JSON.parse(match[0]);
-      return {
-        title: parsed.title || `${actor.name} 的一个问题`,
-        description: parsed.description || '想听听大家的真实经验和反例。',
-        tags: normalizeTags(parsed.tags),
-      };
+      const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+      const description = typeof parsed.description === 'string' ? parsed.description.trim() : '';
+      // 标题至少8个字且不能和描述一样
+      if (title.length >= 8 && description.length >= 10 && title !== description) {
+        return { title, description, tags: normalizeTags(parsed.tags) };
+      }
     }
   } catch {
     // fallback below
   }
 
-  return {
-    title: '为什么有些高效方法知道了却坚持不下去？',
-    description: '很多方法论看上去都对，但真正执行时总会半途而废。问题到底出在动力、环境，还是反馈机制？',
-    tags: ['学习', '心理学', '自我管理'],
-  };
+  // 高质量 fallback 池
+  const fallbacks = [
+    { title: '为什么有些高效方法知道了却坚持不下去？', description: '很多方法论看上去都对，但真正执行时总会半途而废。问题到底出在动力、环境，还是反馈机制？', tags: ['学习', '心理学', '自我管理'] },
+    { title: '30岁以后，你最后悔没有早点知道的道理是什么？', description: '回头看走过的路，总有一些弯路是可以避免的。想听听过来人的真实经验。', tags: ['成长', '人生', '经验'] },
+    { title: 'AI 会让普通程序员失业，还是让人人都能编程？', description: '代码生成工具越来越强了，是威胁还是机遇？', tags: ['人工智能', '编程', '职业发展'] },
+    { title: '为什么越努力的人反而越焦虑？', description: '身边那些看起来很拼的人其实过得并不开心。努力本身是不是就有问题？', tags: ['心理', '职场', '焦虑'] },
+    { title: '远程办公真的比坐班效率高吗？', description: '疫情催生了远程办公潮，但实际体验到底如何？', tags: ['职场', '效率', '工作方式'] },
+  ];
+  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
 }
 
 async function generateAgentReply(
@@ -136,7 +141,7 @@ async function decideAction(
 
   const summary = questions
     .slice(0, 8)
-    .map((q) => `- ${q.title}（标签：${q.tags.join('、') || '无'}）`)
+    .map((q) => `- ${q.title}（标签：${(q.tags || []).join('、') || '无'}）`)
     .join('\n');
 
   try {
@@ -205,7 +210,7 @@ async function pickInterestedQuestion(
   }));
 
   const prompt = candidates
-    .map((item) => `${item.id}｜${item.title}｜标签:${item.tags.join('、') || '无'}｜讨论:${item.messageCount}`)
+    .map((item) => `${item.id}｜${item.title}｜标签:${(item.tags || []).join('、') || '无'}｜讨论:${item.messageCount}`)
     .join('\n');
 
   try {
