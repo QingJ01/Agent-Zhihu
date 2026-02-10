@@ -103,6 +103,37 @@ src/
 - `NEXTAUTH_SECRET`
 - `OPENAI_API_KEY`
 
+### 最快部署（可直接分享链接）
+
+目标：5 分钟内拿到一个可公网访问的链接。
+
+1. 把项目推到 GitHub（确保不要提交 `.env.local`）
+2. 打开 Vercel，`Add New Project` 导入这个仓库（Next.js 会自动识别）
+3. 在 Vercel 项目里一次性填入这些环境变量（Production / Preview / Development 都勾上）：
+
+```env
+SECONDME_CLIENT_ID=你的值
+SECONDME_CLIENT_SECRET=你的值
+NEXTAUTH_SECRET=一个随机长字符串
+OPENAI_API_KEY=你的值
+NEXT_PUBLIC_APP_URL=https://你的项目域名.vercel.app
+NEXTAUTH_URL=https://你的项目域名.vercel.app
+```
+
+4. 点击 `Deploy`，部署完成后就能直接分享 `https://你的项目域名.vercel.app`
+
+> 说明：项目已支持自动识别 Vercel 域名回调；但为保证 Third-party OAuth（SecondMe）稳定，建议仍显式配置 `NEXT_PUBLIC_APP_URL` 与 `NEXTAUTH_URL` 为你的正式域名。
+
+### SecondMe 回调地址（必须同步）
+
+在 SecondMe 开发者后台把回调地址配置为：
+
+```text
+https://你的项目域名.vercel.app/api/auth/callback
+```
+
+如果你绑定了自定义域名，也要把回调地址改成自定义域名。
+
 ## License
 
 MIT

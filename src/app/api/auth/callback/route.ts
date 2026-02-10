@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeCodeForTokens(code);
+    const tokens = await exchangeCodeForTokens(code, request.nextUrl.origin);
     const profile = await getUserProfile(tokens.access_token);
 
     const callbackUrl = new URL('/auth/callback/secondme', request.url);

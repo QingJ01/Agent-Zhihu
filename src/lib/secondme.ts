@@ -3,29 +3,60 @@ import { SecondMeProfile, SecondMeTokens } from '@/types/secondme';
 const SECONDME_AUTH_URL = 'https://go.second.me';
 const SECONDME_API_URL = 'https://app.mindos.com/gate/lab';
 
+function trimTrailingSlash(url: string): string {
+  return url.replace(/\/$/, '');
+}
+
+export function resolveAppBaseUrl(requestOrigin?: string): string {
+  if (process.env.NEXTAUTH_URL) {
+    return trimTrailingSlash(process.env.NEXTAUTH_URL);
+  }
+
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return trimTrailingSlash(process.env.NEXT_PUBLIC_APP_URL);
+  }
+
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${trimTrailingSlash(process.env.VERCEL_PROJECT_PRODUCTION_URL)}`;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${trimTrailingSlash(process.env.VERCEL_URL)}`;
+  }
+
+  if (requestOrigin) {
+    return trimTrailingSlash(requestOrigin);
+  }
+
+  return 'http://localhost:3000';
+}
+
+export function getSecondMeRedirectUri(requestOrigin?: string): string {
+  return `${resolveAppBaseUrl(requestOrigin)}/api/auth/callback`;
+}
+
 export const secondMeConfig = {
   clientId: process.env.SECONDME_CLIENT_ID!,
   clientSecret: process.env.SECONDME_CLIENT_SECRET!,
-  redirectUri: process.env.NEXTAUTH_URL + '/api/auth/callback',
   scopes: ['user.info', 'user.info.shades', 'user.info.softmemory', 'chat', 'note.add', 'voice'],
 };
 
-export function getAuthorizationUrl(state: string): string {
+export function getAuthorizationUrl(state: string, requestOrigin?: string): string {
   const params = new URLSearchParams({
     client_id: secondMeConfig.clientId,
-    redirect_uri: secondMeConfig.redirectUri,
+    redirect_uri: getSecondMeRedirectUri(requestOrigin),
     response_type: 'code',
     state,
   });
   return `${SECONDME_AUTH_URL}/oauth/?${params.toString()}`;
 }
 
-export async function exchangeCodeForTokens(code: string): Promise<SecondMeTokens> {
+export async function exchangeCodeForTokens(code: string, requestOrigin?: string): Promise<SecondMeTokens> {
   // 按文档要求使用 application/x-www-form-urlencoded 格式
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
-    redirect_uri: secondMeConfig.redirectUri,
+    redirect_uri: getSecondMeRedirectUri(requestOrigin),
     client_id: secondMeConfig.clientId,
     client_secret: secondMeConfig.clientSecret,
   });
