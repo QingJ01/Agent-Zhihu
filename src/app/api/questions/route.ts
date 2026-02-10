@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { Question, DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { AI_EXPERTS, selectExperts, getRandomExperts } from '@/lib/experts';
+import { connectDB } from '@/lib/mongodb';
+import QuestionModel from '@/models/Question';
+import MessageModel from '@/models/Message';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -186,9 +189,29 @@ ${isReplyToUser ? '\n6. 这是回复真人用户，要更加友好和有启发�
     return { content: raw, shouldLike: [] };
 }
 
-// GET: 生成新问题
-export async function GET() {
+// GET: 生成新问题或获取问题列表
+export async function GET(request: NextRequest) {
     try {
+        const searchParams = request.nextUrl.searchParams;
+        const action = searchParams.get('action');
+        const limit = parseInt(searchParams.get('limit') || '50', 10);
+
+        // 如果是获取列表，从数据库读取
+        if (action === 'list') {
+            await connectDB();
+            const questions = await QuestionModel.find()
+                .sort({ createdAt: -1 })
+                .limit(limit)
+                .lean();
+
+            return NextResponse.json(questions.map(q => ({
+                ...q,
+                _id: undefined,
+                __v: undefined,
+            })));
+        }
+
+        // 默认：生成新问题
         const questionData = await generateQuestion();
         const question: Question = {
             id: `q-${Date.now()}`,
@@ -200,9 +223,18 @@ export async function GET() {
             discussionRounds: 0,
         };
         return NextResponse.json(question);
-    } catch (error) {
-        console.error('Generate question error:', error);
-        return NextResponse.json({ error: 'Failed to generate question' }, { status: 500 });
+    } catch (error: any) {
+        console.error('GET /api/questions error:', error);
+
+        // 如果是 API key 错误 (401)，返回友好提示
+        if (error?.status === 401 || error?.message?.includes('401')) {
+            return NextResponse.json(
+                { error: 'API key 无效或配额用完，暂时无法生成新问题' },
+                { status: 503 }
+            );
+        }
+
+        return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
     }
 }
 
@@ -237,6 +269,28 @@ export async function POST(request: NextRequest) {
                 };
 
                 try {
+                    // 连接数据库
+                    await connectDB();
+
+                    // 保存或更新问题到数据库
+                    await QuestionModel.findOneAndUpdate(
+                        { id: question.id },
+                        {
+                            id: question.id,
+                            title: question.title,
+                            description: question.description,
+                            tags: question.tags || [],
+                            author: question.author,
+                            createdBy: question.createdBy || 'system',
+                            status: question.status || 'discussing',
+                            discussionRounds: question.discussionRounds || 0,
+                            upvotes: question.upvotes || 0,
+                            likedBy: question.likedBy || [],
+                            createdAt: question.createdAt || Date.now(),
+                        },
+                        { upsert: true, returnDocument: 'after' }
+                    );
+
                     const allMessages: DiscussionMessage[] = [...messages];
 
                     // 用户评论
@@ -254,7 +308,14 @@ export async function POST(request: NextRequest) {
                             replyTo: replyToId,
                         };
                         allMessages.push(userMsg);
+
+                        // 保存用户消息到数据库
                         if (!userMessageAlreadyPersisted) {
+                            await MessageModel.findOneAndUpdate(
+                                { id: userMsg.id },
+                                { ...userMsg },
+                                { upsert: true, returnDocument: 'after' }
+                            );
                             sendEvent('message', userMsg);
                         }
                     }
@@ -362,6 +423,14 @@ export async function POST(request: NextRequest) {
                         };
 
                         allMessages.push(message);
+
+                        // 保存消息到数据库
+                        await MessageModel.findOneAndUpdate(
+                            { id: message.id },
+                            { ...message },
+                            { upsert: true, returnDocument: 'after' }
+                        );
+
                         sendEvent('message', message);
 
                         // 模拟真人打字延迟
@@ -371,6 +440,15 @@ export async function POST(request: NextRequest) {
                     // 完成
                     const newStatus = isUserTriggered ? 'active' : 'waiting';
                     const newRounds = (question.discussionRounds || 0) + rounds;
+
+                    // 更新问题状态到数据库
+                    await QuestionModel.findOneAndUpdate(
+                        { id: question.id },
+                        {
+                            status: newStatus,
+                            discussionRounds: newRounds,
+                        }
+                    );
 
                     sendEvent('done', {
                         status: newStatus,
