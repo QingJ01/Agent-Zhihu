@@ -13,6 +13,9 @@ import { AppHeader } from '@/components/AppHeader';
 import { AI_EXPERTS } from '@/lib/experts';
 import { HashtagText } from '@/components/HashtagText';
 
+type QuestionWithMeta = Question & { isFavorited?: boolean; messageCount?: number };
+type MessageWithMeta = DiscussionMessage & { isFavorited?: boolean };
+
 interface PageProps {
     params: Promise<{ id: string }>;
 }
@@ -21,8 +24,8 @@ export default function QuestionPage({ params }: PageProps) {
     const { id } = use(params);
     const router = useRouter();
     const { data: session } = useSession();
-    const [question, setQuestion] = useState<Question | null>(null);
-    const [messages, setMessages] = useState<DiscussionMessage[]>([]);
+    const [question, setQuestion] = useState<QuestionWithMeta | null>(null);
+    const [messages, setMessages] = useState<MessageWithMeta[]>([]);
     const [hotQuestions, setHotQuestions] = useState<(Question & { messageCount?: number })[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isTyping, setIsTyping] = useState(false);
@@ -35,7 +38,18 @@ export default function QuestionPage({ params }: PageProps) {
     const [replyTarget, setReplyTarget] = useState<DiscussionMessage | null>(null);
     const commentSectionRef = useRef<HTMLDivElement | null>(null);
 
-    // 加载问题和消息（优先从服务器加载）
+    const loadHotQuestions = useCallback(async () => {
+        try {
+            const hotResponse = await fetch('/api/questions?action=list&limit=20');
+            if (!hotResponse.ok) return;
+            const hotData = await hotResponse.json();
+            setHotQuestions(Array.isArray(hotData) ? hotData : []);
+        } catch (error) {
+            console.error('Failed to load hot questions:', error);
+        }
+    }, []);
+
+    // 加载问题和消息
     useEffect(() => {
         const loadQuestion = async () => {
             try {
@@ -45,19 +59,13 @@ export default function QuestionPage({ params }: PageProps) {
                     if (data.question) {
                         setQuestion(data.question);
                         setMessages(data.messages || []);
-
-                        // 加载热门问题列表 (从 localStorage 或 API)
-                        try {
-                            const stored = localStorage.getItem('agent-zhihu-questions');
-                            if (stored) {
-                                const localData = JSON.parse(stored);
-                                const questions = (localData.questions || []).map((q: Question) => ({
-                                    ...q,
-                                    messageCount: (localData.messages?.[q.id] || []).length,
-                                }));
-                                setHotQuestions(questions);
-                            }
-                        } catch (e) { console.error(e); }
+                        setQuestionFavorited(!!data.question.isFavorited);
+                        const messageFavoriteMap = ((data.messages || []) as MessageWithMeta[]).reduce((acc: Record<string, boolean>, item: MessageWithMeta) => {
+                            acc[item.id] = !!item.isFavorited;
+                            return acc;
+                        }, {});
+                        setMessageFavorites(messageFavoriteMap);
+                        await loadHotQuestions();
 
                         setIsLoading(false);
                         return;
@@ -67,31 +75,10 @@ export default function QuestionPage({ params }: PageProps) {
                 console.error('Failed to load from server:', error);
             }
 
-            // 服务器加载失败或问题不存在时，回退到 localStorage
-            try {
-                const stored = localStorage.getItem('agent-zhihu-questions');
-                if (stored) {
-                    const data = JSON.parse(stored);
-                    const q = data.questions?.find((q: Question) => q.id === id);
-                    if (q) {
-                        setQuestion(q);
-                        setMessages(data.messages?.[id] || []);
-                        // 加载热门列表
-                        const questions = (data.questions || []).map((q: Question) => ({
-                            ...q,
-                            messageCount: (data.messages?.[q.id] || []).length,
-                        }));
-                        setHotQuestions(questions);
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to load from localStorage:', e);
-            }
-
             setIsLoading(false);
         };
         loadQuestion();
-    }, [id]);
+    }, [id, loadHotQuestions]);
 
     // 提交评论
     const handleComment = useCallback(async (content: string, replyToId?: string) => {
@@ -192,61 +179,6 @@ export default function QuestionPage({ params }: PageProps) {
             setTypingExpert(null);
         }
     }, [question, messages, session]);
-
-    useEffect(() => {
-        const userId = session?.user?.id;
-        if (!userId || !question) {
-            setQuestionFavorited(false);
-            return;
-        }
-
-        const controller = new AbortController();
-        const loadQuestionFavorite = async () => {
-            try {
-                const response = await fetch(`/api/favorites?targetType=question&targetIds=${encodeURIComponent(question.id)}`, {
-                    signal: controller.signal,
-                });
-                if (!response.ok) return;
-                const data = await response.json();
-                setQuestionFavorited(!!data.statuses?.[question.id]);
-            } catch (error) {
-                if ((error as { name?: string }).name !== 'AbortError') {
-                    console.error('Failed to load question favorite status:', error);
-                }
-            }
-        };
-
-        loadQuestionFavorite();
-        return () => controller.abort();
-    }, [question, session?.user?.id]);
-
-    useEffect(() => {
-        const userId = session?.user?.id;
-        const messageIds = messages.map((m) => m.id);
-        if (!userId || messageIds.length === 0) {
-            setMessageFavorites({});
-            return;
-        }
-
-        const controller = new AbortController();
-        const loadMessageFavorites = async () => {
-            try {
-                const response = await fetch(`/api/favorites?targetType=message&targetIds=${encodeURIComponent(messageIds.join(','))}`, {
-                    signal: controller.signal,
-                });
-                if (!response.ok) return;
-                const data = await response.json();
-                setMessageFavorites(data.statuses || {});
-            } catch (error) {
-                if ((error as { name?: string }).name !== 'AbortError') {
-                    console.error('Failed to load message favorite statuses:', error);
-                }
-            }
-        };
-
-        loadMessageFavorites();
-        return () => controller.abort();
-    }, [messages, session?.user?.id]);
 
     const handleQuestionVote = useCallback(async (voteType: 'up' | 'down') => {
         if (!question) return;

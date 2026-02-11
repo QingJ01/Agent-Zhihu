@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { Question, DiscussionMessage } from '@/types/zhihu';
 import { AppHeader } from '@/components/AppHeader';
 
 type LogActionType = 'human_question' | 'agent_question' | 'human_reply' | 'agent_reply';
@@ -17,21 +16,11 @@ interface LogEvent {
   contentPreview: string;
 }
 
-interface QuestionsStore {
-  questions: Question[];
-  messages: Record<string, DiscussionMessage[]>;
-}
-
-const EMPTY_STORE: QuestionsStore = {
-  questions: [],
-  messages: {},
-};
-
-function toLogType(message: DiscussionMessage): LogActionType | null {
-  if (message.authorType !== 'user') return null;
-  if (message.createdBy === 'agent') return 'agent_reply';
-  if (message.createdBy === 'human') return 'human_reply';
-  return null;
+interface LogStats {
+  humanQuestions: number;
+  agentQuestions: number;
+  humanReplies: number;
+  agentReplies: number;
 }
 
 function formatTime(timestamp: number): string {
@@ -45,14 +34,23 @@ function formatTime(timestamp: number): string {
 
 export default function LogsPage() {
   const { data: session, status } = useSession();
-  const [store, setStore] = useState<QuestionsStore>(EMPTY_STORE);
+  const [logs, setLogs] = useState<LogEvent[]>([]);
+  const [stats, setStats] = useState<LogStats>({
+    humanQuestions: 0,
+    agentQuestions: 0,
+    humanReplies: 0,
+    agentReplies: 0,
+  });
 
   useEffect(() => {
-    const sync = () => {
+    const sync = async () => {
       try {
-        const raw = localStorage.getItem('agent-zhihu-questions');
-        if (raw) {
-          setStore(JSON.parse(raw));
+        const response = await fetch('/api/logs?limit=200');
+        if (!response.ok) return;
+        const data = await response.json();
+        setLogs(Array.isArray(data.events) ? data.events : []);
+        if (data.stats) {
+          setStats(data.stats);
         }
       } catch (error) {
         console.error('Failed to load logs data:', error);
@@ -65,63 +63,6 @@ export default function LogsPage() {
       window.removeEventListener('agent-zhihu-store-updated', sync);
     };
   }, []);
-
-  const logs = useMemo(() => {
-    const questionsById = new Map(store.questions.map((question) => [question.id, question]));
-    const events: LogEvent[] = [];
-
-    for (const question of store.questions) {
-      if (question.createdBy === 'human' || question.createdBy === 'agent') {
-        events.push({
-          id: `qlog-${question.id}`,
-          timestamp: question.createdAt,
-          type: question.createdBy === 'human' ? 'human_question' : 'agent_question',
-          questionId: question.id,
-          questionTitle: question.title,
-          contentPreview: (question.description || '').slice(0, 90),
-        });
-      }
-    }
-
-    for (const [questionId, messages] of Object.entries(store.messages || {})) {
-      const question = questionsById.get(questionId);
-      if (!question) continue;
-
-      for (const message of messages) {
-        const type = toLogType(message);
-        if (!type) continue;
-
-        events.push({
-          id: `mlog-${message.id}`,
-          timestamp: message.createdAt,
-          type,
-          questionId,
-          questionTitle: question.title,
-          contentPreview: message.content.slice(0, 120),
-        });
-      }
-    }
-
-    return events.sort((a, b) => b.timestamp - a.timestamp);
-  }, [store]);
-
-  const stats = useMemo(() => {
-    const summary = {
-      humanQuestions: 0,
-      agentQuestions: 0,
-      humanReplies: 0,
-      agentReplies: 0,
-    };
-
-    for (const item of logs) {
-      if (item.type === 'human_question') summary.humanQuestions += 1;
-      if (item.type === 'agent_question') summary.agentQuestions += 1;
-      if (item.type === 'human_reply') summary.humanReplies += 1;
-      if (item.type === 'agent_reply') summary.agentReplies += 1;
-    }
-
-    return summary;
-  }, [logs]);
 
   const typeLabel: Record<LogActionType, string> = {
     human_question: '真人提问',
