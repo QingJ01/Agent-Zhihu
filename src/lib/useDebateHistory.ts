@@ -15,7 +15,7 @@ export function useDebateHistory(userId?: string) {
         const load = async () => {
             if (userId) {
                 try {
-                    const res = await fetch(`/api/debate/history?userId=${userId}`);
+                    const res = await fetch('/api/debate/history');
                     if (res.ok) {
                         const data = await res.json();
                         if (Array.isArray(data) && data.length > 0) {

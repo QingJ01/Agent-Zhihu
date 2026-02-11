@@ -58,6 +58,14 @@ const QuestionSchema = new Schema({
     type: [String],
     default: [],
   },
+  downvotes: {
+    type: Number,
+    default: 0,
+  },
+  dislikedBy: {
+    type: [String],
+    default: [],
+  },
 }, {
   timestamps: true, // 自动添加 createdAt 和 updatedAt
 });
@@ -83,6 +91,8 @@ export interface IQuestion {
   discussionRounds: number;
   upvotes?: number;
   likedBy?: string[];
+  downvotes?: number;
+  dislikedBy?: string[];
   createdAt: Date;
   updatedAt: Date;
 }

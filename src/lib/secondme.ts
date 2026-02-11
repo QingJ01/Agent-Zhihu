@@ -10,22 +10,29 @@ export const secondMeConfig = {
   scopes: ['user.info', 'user.info.shades', 'user.info.softmemory', 'chat', 'note.add', 'voice'],
 };
 
-export function getAuthorizationUrl(state: string): string {
+function resolveRedirectUri(redirectUri?: string): string {
+  if (redirectUri) {
+    return redirectUri;
+  }
+  return secondMeConfig.redirectUri;
+}
+
+export function getAuthorizationUrl(state: string, redirectUri?: string): string {
   const params = new URLSearchParams({
     client_id: secondMeConfig.clientId,
-    redirect_uri: secondMeConfig.redirectUri,
+    redirect_uri: resolveRedirectUri(redirectUri),
     response_type: 'code',
     state,
   });
   return `${SECONDME_AUTH_URL}/oauth/?${params.toString()}`;
 }
 
-export async function exchangeCodeForTokens(code: string): Promise<SecondMeTokens> {
+export async function exchangeCodeForTokens(code: string, redirectUri?: string): Promise<SecondMeTokens> {
   // 按文档要求使用 application/x-www-form-urlencoded 格式
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
-    redirect_uri: secondMeConfig.redirectUri,
+    redirect_uri: resolveRedirectUri(redirectUri),
     client_id: secondMeConfig.clientId,
     client_secret: secondMeConfig.clientSecret,
   });

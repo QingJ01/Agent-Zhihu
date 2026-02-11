@@ -3,8 +3,16 @@ import { connectDB } from '@/lib/mongodb';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 
+function isProduction(): boolean {
+    return process.env.NODE_ENV === 'production';
+}
+
 // 测试 API：创建测试数据并验证数据库功能
 export async function GET() {
+    if (isProduction()) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     try {
         await connectDB();
 
@@ -89,6 +97,10 @@ export async function GET() {
 
 // DELETE: 清理测试数据
 export async function DELETE() {
+    if (isProduction()) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     try {
         await connectDB();
 

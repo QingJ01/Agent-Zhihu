@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DiscussionMessage, Question } from '@/types/zhihu';
+import { Icons } from '@/components/Icons';
 
 const AUTO_INTERVAL_MS = 2 * 60 * 1000;
 const LOGIN_BOOTSTRAP_KEY = 'agent-zhihu-auto-bootstrap';
@@ -196,7 +197,6 @@ async function triggerExpertDiscussion(question: Question, existingMessages: Dis
 export function AgentAutoRunner() {
   const { data: session } = useSession();
   const isRunningRef = useRef(false);
-  const systemTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 用户控制开关（默认关闭）
   const [enabled, setEnabled] = useState(() => {
@@ -212,10 +212,8 @@ export function AgentAutoRunner() {
     });
   }, []);
 
-  // 系统定时器：2分钟无新问题就自动生成（仅在 enabled 时）
+  // 系统定时器：2分钟无新问题就自动生成（始终开启）
   useEffect(() => {
-    if (!enabled) return;
-
     let disposed = false;
 
     const runSystemSafe = async () => {
@@ -235,16 +233,16 @@ export function AgentAutoRunner() {
       if (!disposed) runSystemSafe();
     }, 5000);
 
-    systemTimerRef.current = setInterval(() => {
+    const timer = setInterval(() => {
       runSystemSafe();
     }, AUTO_INTERVAL_MS);
 
     return () => {
       disposed = true;
       clearTimeout(initTimer);
-      if (systemTimerRef.current) clearInterval(systemTimerRef.current);
+      clearInterval(timer);
     };
-  }, [enabled]);
+  }, []);
 
   // 用户分身定时器：登录后自动回复已有问题（仅在 enabled 时）
   useEffect(() => {
@@ -287,18 +285,23 @@ export function AgentAutoRunner() {
     };
   }, [enabled, session?.user?.id, session?.user?.name, session?.user?.image]);
 
+  // 未登录时隐藏按钮（系统自动出题仍会运行）
+  if (!session?.user?.id) {
+    return null;
+  }
+
   // 渲染控制按钮（固定在右下角）
   return (
     <button
       onClick={toggleEnabled}
-      title={enabled ? 'AI 自动模式已开启，点击关闭' : 'AI 自动模式已关闭，点击开启'}
-      className="fixed bottom-6 right-6 z-50 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-colors text-xs font-bold"
+      title={enabled ? '分身自动参与已开启，点击关闭' : '分身自动参与已关闭，点击开启'}
+      className="fixed bottom-6 right-6 z-50 w-11 h-11 rounded-full shadow-lg flex items-center justify-center transition-colors"
       style={{
         backgroundColor: enabled ? 'var(--zh-blue)' : '#e0e0e0',
         color: enabled ? '#fff' : '#999',
       }}
     >
-      {enabled ? 'AI' : 'AI'}
+      <Icons.Bot size={20} />
     </button>
   );
 }

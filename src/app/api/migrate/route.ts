@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { connectDB } from '@/lib/mongodb';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
@@ -31,9 +33,26 @@ type MigrationPayload = {
     debates?: ImportedDebate[];
 };
 
+function isMigrationAllowed(userId: string | undefined): boolean {
+    if (!userId) return false;
+    if (process.env.NODE_ENV !== 'production') return true;
+
+    const admins = (process.env.MIGRATION_ADMIN_IDS || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+
+    return admins.includes(userId);
+}
+
 // POST: 批量导入数据
 export async function POST(request: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!isMigrationAllowed(session?.user?.id)) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        }
+
         const { questions, messages, debates } = (await request.json()) as MigrationPayload;
 
         if (!questions && !messages && !debates) {
@@ -155,6 +174,11 @@ export async function POST(request: NextRequest) {
 // GET: 导出数据（从数据库）
 export async function GET(request: NextRequest) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!isMigrationAllowed(session?.user?.id)) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+        }
+
         const searchParams = request.nextUrl.searchParams;
         const userId = searchParams.get('userId');
 

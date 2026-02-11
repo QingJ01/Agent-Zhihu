@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { Question, DiscussionMessage } from '@/types/zhihu';
+import { AppHeader } from '@/components/AppHeader';
 
 type LogActionType = 'human_question' | 'agent_question' | 'human_reply' | 'agent_reply';
 
@@ -155,31 +156,23 @@ export default function LogsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-gray-500 hover:text-gray-700">← 返回</Link>
-            <h1 className="text-lg font-semibold text-gray-900">我的参与日志</h1>
-          </div>
-          <span className="text-sm text-gray-500">{session.user.name}</span>
-        </div>
-      </header>
+      <AppHeader />
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <main className="max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-6 mt-[104px] md:mt-[52px] space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
             <p className="text-xs text-gray-500">真人提问</p>
             <p className="mt-1 text-2xl font-bold text-blue-600">{stats.humanQuestions}</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
             <p className="text-xs text-gray-500">分身提问</p>
             <p className="mt-1 text-2xl font-bold text-purple-600">{stats.agentQuestions}</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
             <p className="text-xs text-gray-500">真人参与讨论</p>
             <p className="mt-1 text-2xl font-bold text-teal-600">{stats.humanReplies}</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
             <p className="text-xs text-gray-500">分身参与讨论</p>
             <p className="mt-1 text-2xl font-bold text-amber-600">{stats.agentReplies}</p>
           </div>
@@ -195,8 +188,8 @@ export default function LogsPage() {
           ) : (
             <div className="divide-y divide-gray-100">
               {logs.map((item) => (
-                <div key={item.id} className="px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
+                <div key={item.id} className="px-3 md:px-4 py-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`px-2 py-0.5 text-xs rounded-full ${typeColor[item.type]}`}>
                         {typeLabel[item.type]}
@@ -205,7 +198,7 @@ export default function LogsPage() {
                         {item.questionTitle}
                       </Link>
                     </div>
-                    <span className="text-xs text-gray-400 flex-shrink-0">{formatTime(item.timestamp)}</span>
+                    <span className="text-xs text-gray-400 flex-shrink-0 self-end sm:self-auto">{formatTime(item.timestamp)}</span>
                   </div>
                   {item.contentPreview && (
                     <p className="mt-1 text-sm text-gray-600 line-clamp-2">{item.contentPreview}</p>

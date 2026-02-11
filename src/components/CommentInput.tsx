@@ -1,27 +1,45 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { Icons } from '@/components/Icons';
 
 interface CommentInputProps {
-    onSubmit: (content: string) => Promise<void>;
+    onSubmit: (content: string, replyToId?: string) => Promise<void>;
     disabled?: boolean;
     placeholder?: string;
+    submitLabel?: string;
+    replyTarget?: {
+        id: string;
+        name: string;
+        preview?: string;
+    } | null;
+    onCancelReply?: () => void;
 }
 
-export function CommentInput({ onSubmit, disabled, placeholder }: CommentInputProps) {
+export function CommentInput({
+    onSubmit,
+    disabled,
+    placeholder,
+    submitLabel,
+    replyTarget,
+    onCancelReply,
+}: CommentInputProps) {
     const { data: session } = useSession();
     const [content, setContent] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+    const quickEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '🎉', '🔥', '✅', '❌', '🙏', '💡'];
 
     if (!session?.user) {
         return (
-            <div className="bg-gray-50 rounded-xl p-6 text-center">
-                <p className="text-gray-500 mb-3">登录后参与讨论</p>
+            <div className="bg-white rounded-[2px] p-4 border border-[var(--zh-border)] text-center">
+                <p className="text-[var(--zh-text-gray)] mb-3">登录后参与讨论</p>
                 <button
                     type="button"
                     onClick={() => { window.location.href = '/api/auth/login'; }}
-                    className="inline-block px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-medium hover:shadow-lg transition-all"
+                    className="inline-block px-4 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] transition-colors"
                 >
                     用 SecondMe 登录
                 </button>
@@ -34,8 +52,9 @@ export function CommentInput({ onSubmit, disabled, placeholder }: CommentInputPr
 
         setIsSubmitting(true);
         try {
-            await onSubmit(content.trim());
+            await onSubmit(content.trim(), replyTarget?.id);
             setContent('');
+            onCancelReply?.();
         } catch (error) {
             console.error('Submit failed:', error);
         } finally {
@@ -43,38 +62,115 @@ export function CommentInput({ onSubmit, disabled, placeholder }: CommentInputPr
         }
     };
 
+    const insertAtCursor = (text: string) => {
+        const input = textareaRef.current;
+        if (!input) {
+            setContent((prev) => `${prev}${text}`);
+            return;
+        }
+
+        const start = input.selectionStart ?? content.length;
+        const end = input.selectionEnd ?? content.length;
+        const next = `${content.slice(0, start)}${text}${content.slice(end)}`;
+        setContent(next);
+
+        requestAnimationFrame(() => {
+            input.focus();
+            const cursor = start + text.length;
+            input.setSelectionRange(cursor, cursor);
+        });
+    };
+
     return (
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-3 md:p-4">
             <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+                <div className="hidden sm:flex w-[38px] h-[38px] rounded-[2px] overflow-hidden bg-[var(--zh-bg)] items-center justify-center text-gray-400 flex-shrink-0">
                     {session.user.image ? (
                         <img
                             src={session.user.image}
                             alt={session.user.name || 'User'}
-                            className="w-full h-full rounded-full object-cover"
+                            className="w-full h-full object-cover"
                         />
                     ) : (
-                        session.user.name?.charAt(0) || 'U'
+                        <Icons.User size={20} />
                     )}
                 </div>
                 <div className="flex-1">
+                    {replyTarget && (
+                        <div className="mb-2 flex items-start justify-between rounded-[3px] bg-[#F6F6F6] px-3 py-2 text-sm">
+                            <div className="text-[var(--zh-text-secondary)]">
+                                回复 <span className="font-medium text-[var(--zh-blue)]">@{replyTarget.name}</span>
+                                {replyTarget.preview ? <span className="ml-1 opacity-80">{replyTarget.preview}</span> : null}
+                            </div>
+                            {onCancelReply && (
+                                <button
+                                    type="button"
+                                    onClick={onCancelReply}
+                                    className="ml-3 text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)]"
+                                >
+                                    取消
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <textarea
+                        ref={textareaRef}
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
                         placeholder={placeholder || '参与讨论，发表你的观点...'}
+                        aria-label="评论内容"
                         disabled={disabled || isSubmitting}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-50"
-                        rows={3}
+                        className="w-full min-h-[84px] resize-none outline-none text-[14px] md:text-[15px] leading-relaxed placeholder-[var(--zh-text-gray)] disabled:bg-gray-50"
+                        rows={4}
                     />
-                    <div className="mt-3 flex justify-end">
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-3 md:gap-5 text-[var(--zh-text-gray)]">
+                            <button
+                                type="button"
+                                onClick={() => insertAtCursor('#标签 ')}
+                                className="inline-flex items-center gap-1 hover:text-[var(--zh-blue)]"
+                            >
+                                <Icons.Hash className="w-5 h-5" />
+                                <span className="hidden sm:inline text-[13px]">标签</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowEmojiPicker((prev) => !prev)}
+                                className="inline-flex items-center gap-1 hover:text-[var(--zh-blue)]"
+                            >
+                                <Icons.Smile className="w-5 h-5" />
+                                <span className="hidden sm:inline text-[13px]">表情</span>
+                            </button>
+                            <span><Icons.Image className="w-5 h-5" /></span>
+                            <span><Icons.Video className="w-5 h-5" /></span>
+                        </div>
                         <button
+                            type="button"
                             onClick={handleSubmit}
                             disabled={!content.trim() || isSubmitting || disabled}
-                            className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-medium hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-5 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
                         >
-                            {isSubmitting ? '发送中...' : '发表评论'}
+                            {isSubmitting ? '发送中...' : (submitLabel || '发布回答')}
                         </button>
                     </div>
+                    {showEmojiPicker && (
+                        <div className="mt-2 inline-flex flex-wrap gap-1 p-2 bg-[var(--zh-bg)] rounded-[6px] border border-[var(--zh-border)]">
+                            {quickEmojis.map((emoji) => (
+                                <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => {
+                                        insertAtCursor(emoji);
+                                        setShowEmojiPicker(false);
+                                    }}
+                                    className="w-8 h-8 text-lg hover:bg-white rounded"
+                                    aria-label={`插入表情 ${emoji}`}
+                                >
+                                    {emoji}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

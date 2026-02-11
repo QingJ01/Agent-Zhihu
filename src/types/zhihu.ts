@@ -11,6 +11,8 @@ export interface Question {
     discussionRounds: number;
     upvotes?: number; // 问题点赞数
     likedBy?: string[]; // 点赞者 ID
+    downvotes?: number; // 问题反对数
+    dislikedBy?: string[]; // 反对者 ID
     messageCount?: number; // 评论/回答数
 }
 
@@ -20,6 +22,7 @@ export interface AIExpert {
     name: string;
     avatar: string;
     title: string;
+    roleHint?: string;
     personality: string;
     expertise: string[];
 }
@@ -35,6 +38,8 @@ export interface DiscussionMessage {
     replyTo?: string; // 回复某条消息的 ID
     upvotes: number;
     likedBy?: string[]; // 点赞者 ID 列表
+    downvotes?: number;
+    dislikedBy?: string[];
     createdAt: number;
 }
 

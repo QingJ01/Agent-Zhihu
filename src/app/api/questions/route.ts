@@ -13,6 +13,26 @@ const openai = new OpenAI({
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DISCUSSION_ROUNDS = 4;
+const QUESTION_GENERATION_ATTEMPTS = 2;
+
+const QUESTION_TOPIC_SEEDS = [
+    '职场选择与成长',
+    '亲密关系与家庭',
+    '金钱观与消费决策',
+    '城市迁移与生活方式',
+    '教育投入与回报',
+    '技术变化与个人焦虑',
+    '健康管理与作息习惯',
+    '代际观念与沟通冲突',
+];
+
+const QUESTION_VOICE_SEEDS = [
+    '第一人称真实困惑',
+    '观察型提问',
+    '决策型两难场景',
+    '经验复盘型提问',
+    '反直觉现象追问',
+];
 
 const FALLBACK_QUESTIONS = [
     { title: 'AI 会取代人类的工作吗？', description: '随着 ChatGPT 等 AI 工具的普及，越来越多的人开始担心自己的工作会被 AI 取代。', tags: ['人工智能', '职业发展', '未来'] },
@@ -31,63 +51,141 @@ function getRandomFallback() {
     return FALLBACK_QUESTIONS[Math.floor(Math.random() * FALLBACK_QUESTIONS.length)];
 }
 
+function pickRandom<T>(items: T[]): T {
+    return items[Math.floor(Math.random() * items.length)];
+}
+
+function normalizeTitle(title: string): string {
+    return title
+        .toLowerCase()
+        .replace(/[\s，。！？、,.!?：:;；"'“”‘’（）()【】\[\]《》<>\-]/g, '')
+        .trim();
+}
+
+function isDuplicateTitle(title: string, recentTitles: string[]): boolean {
+    const normalized = normalizeTitle(title);
+    if (!normalized) return true;
+
+    return recentTitles.some((recent) => {
+        const normalizedRecent = normalizeTitle(recent);
+        if (!normalizedRecent) return false;
+        if (normalizedRecent === normalized) return true;
+
+        const minLength = 10;
+        if (normalized.length >= minLength && normalizedRecent.includes(normalized)) return true;
+        if (normalizedRecent.length >= minLength && normalized.includes(normalizedRecent)) return true;
+
+        return false;
+    });
+}
+
+function parseQuestionPayload(content: string): { title: string; description: string; tags: string[] } | null {
+    if (!content.trim()) {
+        return null;
+    }
+
+    try {
+        const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (!match) {
+            return null;
+        }
+
+        const parsed = JSON.parse(match[0]) as {
+            title?: unknown;
+            description?: unknown;
+            tags?: unknown;
+        };
+
+        if (typeof parsed.title !== 'string' || !parsed.title.trim()) {
+            return null;
+        }
+
+        return {
+            title: parsed.title.trim(),
+            description: typeof parsed.description === 'string' ? parsed.description.trim() : '',
+            tags: Array.isArray(parsed.tags)
+                ? parsed.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+                : ['讨论'],
+        };
+    } catch (e) {
+        console.warn('[generateQuestion] JSON parse failed:', e);
+        return null;
+    }
+}
+
 // 生成问题
-async function generateQuestion(): Promise<{ title: string; description: string; tags: string[] }> {
-    const response = await openai.chat.completions.create({
-        model: MODEL,
-        messages: [
-            {
-                role: 'system',
-                content: `你是一个知乎热门问题生成器。生成一个有深度、有争议性的问题。
+async function generateQuestion(recentTitles: string[] = []): Promise<{ title: string; description: string; tags: string[] }> {
+    const dedupPool = [...recentTitles].filter(Boolean).slice(0, 30);
+
+    for (let attempt = 0; attempt < QUESTION_GENERATION_ATTEMPTS; attempt++) {
+        const topicSeed = pickRandom(QUESTION_TOPIC_SEEDS);
+        const voiceSeed = pickRandom(QUESTION_VOICE_SEEDS);
+
+        const response = await openai.chat.completions.create({
+            model: MODEL,
+            messages: [
+                {
+                    role: 'system',
+                    content: `你是知乎首页的选题编辑，请生成一个像真人会发出的高讨论度问题。
 
 请直接输出 JSON（不要用 markdown 代码块包裹），格式如下：
 {"title": "问题标题", "description": "问题描述（50-100字）", "tags": ["标签1", "标签2", "标签3"]}
 
-要求：
-- 问题要有讨论价值，不是简单的事实问题
-- 涉及科技、职场、人生、社会等热门话题
-- 标题要像真人提问，有情感和好奇心`,
-            },
-            { role: 'user', content: '生成一个新的知乎热门问题' },
-        ],
-        max_tokens: 500,
-        temperature: 1.0,
-    });
+强约束：
+1) 标题长度控制在 14-32 个汉字，口语化、有具体场景，必须是一个明确问题。
+2) 描述 50-100 字，补充真实背景和冲突，不要复述标题。
+3) 禁止模板化句式，尤其不要出现“如果……，我们是……，还是……”“如果……该不该……”这类骨架。
+4) 不要空泛宏大叙事，不要套话，不要鸡汤口吻。
+5) 必须像知乎真实用户提问，能引发不同立场讨论。`,
+                },
+                {
+                    role: 'user',
+                    content: `请生成 1 个新问题。
 
-    const content = response.choices[0]?.message?.content || '';
-    console.log('[generateQuestion] LLM raw response:', content);
+本轮主题角度：${topicSeed}
+本轮叙事视角：${voiceSeed}
 
-    if (!content.trim()) {
-        console.warn('[generateQuestion] Empty LLM response, using fallback');
-        return getRandomFallback();
-    }
+最近问题标题（请避免重复和高度相似，不要沿用同样开头和表达方式）：
+${dedupPool.length > 0 ? dedupPool.map((title, index) => `${index + 1}. ${title}`).join('\n') : '暂无'}
 
-    try {
-        // 先尝试去掉 markdown 代码块
-        const cleaned = content.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
-        const match = cleaned.match(/\{[\s\S]*\}/);
-        if (match) {
-            const parsed = JSON.parse(match[0]);
-            // 校验 title 非空
-            if (parsed.title && typeof parsed.title === 'string' && parsed.title.trim()) {
-                return {
-                    title: parsed.title.trim(),
-                    description: (parsed.description || '').trim(),
-                    tags: Array.isArray(parsed.tags) ? parsed.tags : ['讨论'],
-                };
-            }
-            console.warn('[generateQuestion] Parsed JSON but title is empty:', parsed);
+只输出 JSON。`,
+                },
+            ],
+            max_tokens: 500,
+            temperature: 1.05,
+        });
+
+        const content = response.choices[0]?.message?.content || '';
+        console.log(`[generateQuestion] Attempt ${attempt + 1} raw response:`, content);
+
+        const parsed = parseQuestionPayload(content);
+        if (!parsed) {
+            continue;
         }
-    } catch (e) {
-        console.warn('[generateQuestion] JSON parse failed:', e);
+
+        if (isDuplicateTitle(parsed.title, dedupPool)) {
+            console.warn('[generateQuestion] Duplicate/similar title generated:', parsed.title);
+            dedupPool.unshift(parsed.title);
+            continue;
+        }
+
+        return parsed;
     }
 
+    console.warn('[generateQuestion] All attempts failed, using fallback');
     return getRandomFallback();
 }
 
 // 决定回复目标：问题本身还是某条消息
 function decideReplyTarget(messages: DiscussionMessage[]): { target: DiscussionMessage | null; context: string } {
     if (messages.length === 0) {
+        return { target: null, context: '' };
+    }
+
+    // 保留一部分概率直接回答原问题，而不是挂在某条消息下
+    const shouldReplyQuestionDirectly = Math.random() < 0.4;
+    if (shouldReplyQuestionDirectly) {
         return { target: null, context: '' };
     }
 
@@ -139,6 +237,7 @@ async function generateExpertResponse(
         .join('\n\n');
 
     const systemPrompt = `你是 ${expert.name}，${expert.title}。
+${expert.roleHint ? `你在本轮需要扮演：${expert.roleHint}。` : ''}
 
 ${expert.personality}
 
@@ -212,7 +311,23 @@ export async function GET(request: NextRequest) {
         }
 
         // 默认：生成新问题
-        const questionData = await generateQuestion();
+        let recentTitles: string[] = [];
+        try {
+            await connectDB();
+            const recentQuestions = await QuestionModel.find()
+                .sort({ createdAt: -1 })
+                .limit(30)
+                .select('title -_id')
+                .lean();
+
+            recentTitles = (recentQuestions as Array<{ title?: string }>)
+                .map((item) => (typeof item.title === 'string' ? item.title.trim() : ''))
+                .filter((title) => title.length > 0);
+        } catch (dbError) {
+            console.warn('[GET /api/questions] Failed to load recent titles for dedup:', dbError);
+        }
+
+        const questionData = await generateQuestion(recentTitles);
         const question: Question = {
             id: `q-${Date.now()}`,
             title: questionData.title,
@@ -255,6 +370,7 @@ export async function POST(request: NextRequest) {
             userMessageCreatedAt,
             userMessageAlreadyPersisted,
             replyToId,
+            invitedAgentId,
         } = await request.json();
 
         if (!question) {
@@ -262,6 +378,14 @@ export async function POST(request: NextRequest) {
         }
 
         const isUserTriggered = !!userMessage;
+        const isInviteTriggered = typeof invitedAgentId === 'string' && invitedAgentId.trim().length > 0;
+        const invitedExpert = isInviteTriggered
+            ? AI_EXPERTS.find((expert) => expert.id === invitedAgentId)
+            : null;
+
+        if (isInviteTriggered && !invitedExpert) {
+            console.warn('[POST /api/questions] Invalid invitedAgentId, fallback to default expert selection:', invitedAgentId);
+        }
 
         const stream = new ReadableStream({
             async start(controller) {
@@ -287,6 +411,8 @@ export async function POST(request: NextRequest) {
                             discussionRounds: question.discussionRounds || 0,
                             upvotes: question.upvotes || 0,
                             likedBy: question.likedBy || [],
+                            downvotes: question.downvotes || 0,
+                            dislikedBy: question.dislikedBy || [],
                             createdAt: question.createdAt || Date.now(),
                         },
                         { upsert: true, returnDocument: 'after' }
@@ -305,6 +431,8 @@ export async function POST(request: NextRequest) {
                             content: userMessage,
                             upvotes: 0,
                             likedBy: [],
+                            downvotes: 0,
+                            dislikedBy: [],
                             createdAt: typeof userMessageCreatedAt === 'number' ? userMessageCreatedAt : Date.now(),
                             replyTo: replyToId,
                         };
@@ -324,8 +452,12 @@ export async function POST(request: NextRequest) {
                     // 确定回复目标和专家列表
                     let experts: AIExpert[] = [];
 
+                    if (invitedExpert) {
+                        experts = [invitedExpert];
+                    }
+
                     // 如果用户指定了回复对象（回复某个 AI）
-                    if (isUserTriggered && replyToId) {
+                    if (experts.length === 0 && isUserTriggered && replyToId) {
                         const targetMsg = allMessages.find(m => m.id === replyToId);
                         if (targetMsg && targetMsg.authorType === 'ai') {
                             // 找到被回复的专家
@@ -351,7 +483,7 @@ export async function POST(request: NextRequest) {
                     }
 
                     // 逐个生成回复
-                    const rounds = isUserTriggered ? 2 : DISCUSSION_ROUNDS;
+                    const rounds = invitedExpert ? 1 : (isUserTriggered ? 2 : DISCUSSION_ROUNDS);
 
                     for (let round = 0; round < rounds; round++) {
                         const expert = experts[round % experts.length];
@@ -418,6 +550,8 @@ export async function POST(request: NextRequest) {
                             replyTo: target?.id,
                             upvotes: 0,
                             likedBy: [],
+                            downvotes: 0,
+                            dislikedBy: [],
                             createdAt: Date.now(),
                         };
 

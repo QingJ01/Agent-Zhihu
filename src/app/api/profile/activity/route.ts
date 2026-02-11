@@ -5,6 +5,7 @@ import { connectDB } from '@/lib/mongodb';
 import Question from '@/models/Question';
 import Message from '@/models/Message';
 import Debate from '@/models/Debate';
+import Favorite from '@/models/Favorite';
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -109,6 +110,86 @@ export async function GET(request: NextRequest) {
         ...likedQuestions.map(q => ({ ...q, _type: 'question' as const })),
         ...likedMessages.map(m => ({ ...m, _type: 'answer' as const })),
       ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      const total = merged.length;
+      const items = merged.slice(skip, skip + limit);
+      return NextResponse.json({ items, total, hasMore: skip + items.length < total });
+    }
+
+    if (type === 'favorites') {
+      const [favoriteQuestions, favoriteMessages] = await Promise.all([
+        Favorite.find({ userId, targetType: 'question' })
+          .sort({ createdAt: -1 })
+          .limit(100)
+          .select('targetId createdAt')
+          .lean(),
+        Favorite.find({ userId, targetType: 'message' })
+          .sort({ createdAt: -1 })
+          .limit(100)
+          .select('targetId questionId createdAt')
+          .lean(),
+      ]);
+
+      const questionIds = Array.from(new Set(
+        (favoriteQuestions as Array<{ targetId?: string }>)
+          .map((f) => f.targetId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      ));
+      const messageIds = Array.from(new Set(
+        (favoriteMessages as Array<{ targetId?: string }>)
+          .map((f) => f.targetId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      ));
+
+      const [questions, messages] = await Promise.all([
+        questionIds.length > 0
+          ? Question.find({ id: { $in: questionIds } }).select('id title description upvotes createdAt').lean()
+          : Promise.resolve([]),
+        messageIds.length > 0
+          ? Message.aggregate([
+            { $match: { id: { $in: messageIds } } },
+            {
+              $lookup: {
+                from: 'questions',
+                localField: 'questionId',
+                foreignField: 'id',
+                as: 'question',
+              },
+            },
+            { $unwind: { path: '$question', preserveNullAndEmptyArrays: true } },
+            {
+              $project: {
+                id: 1,
+                content: 1,
+                upvotes: 1,
+                createdAt: 1,
+                questionId: 1,
+                questionTitle: '$question.title',
+                'author.name': 1,
+              },
+            },
+          ])
+          : Promise.resolve([]),
+      ]);
+
+      const questionMap = new Map((questions as Array<{ id: string }>).map((q) => [q.id, q]));
+      const messageMap = new Map((messages as Array<{ id: string }>).map((m) => [m.id, m]));
+
+      const questionItems = (favoriteQuestions as Array<{ targetId: string; createdAt: Date }>).map((fav) => ({
+        ...(questionMap.get(fav.targetId) || { id: fav.targetId }),
+        _type: 'question' as const,
+        createdAt: fav.createdAt,
+      }));
+
+      const messageItems = (favoriteMessages as Array<{ targetId: string; createdAt: Date }>).map((fav) => ({
+        ...(messageMap.get(fav.targetId) || { id: fav.targetId }),
+        _type: 'answer' as const,
+        createdAt: fav.createdAt,
+      }));
+
+      const merged = [...questionItems, ...messageItems].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
 
       const total = merged.length;
       const items = merged.slice(skip, skip + limit);

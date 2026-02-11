@@ -1,37 +1,26 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useEffect, Suspense } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 function CallbackHandler() {
-  const searchParams = useSearchParams();
   const router = useRouter();
 
   useEffect(() => {
-    const profile = searchParams.get('profile');
-    const accessToken = searchParams.get('accessToken');
+    const baseUrl = window.location.origin;
 
-    if (profile) {
-      // Use window.location.origin to get the correct Cloudflare Tunnel URL
-      const baseUrl = window.location.origin;
-      signIn('secondme', {
-        profile,
-        accessToken: accessToken || '',
-        callbackUrl: `${baseUrl}/`,
-        redirect: false,
-      }).then((result) => {
-        if (result?.ok) {
-          // Manually redirect using the correct origin
-          window.location.href = `${baseUrl}/`;
-        } else {
-          router.push('/?error=signin_failed');
-        }
-      });
-    } else {
-      router.push('/?error=missing_profile');
-    }
-  }, [searchParams, router]);
+    signIn('secondme', {
+      callbackUrl: `${baseUrl}/`,
+      redirect: false,
+    }).then((result) => {
+      if (result?.ok) {
+        window.location.assign(`${baseUrl}/`);
+      } else {
+        router.replace('/?error=signin_failed');
+      }
+    });
+  }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -44,13 +33,5 @@ function CallbackHandler() {
 }
 
 export default function SecondMeCallbackPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent" />
-      </div>
-    }>
-      <CallbackHandler />
-    </Suspense>
-  );
+  return <CallbackHandler />;
 }

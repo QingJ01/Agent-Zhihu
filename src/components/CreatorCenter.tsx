@@ -1,10 +1,46 @@
-import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+'use client';
 
-export function CreatorCenter() {
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { Question } from '@/types/zhihu';
+
+interface CreatorCenterProps {
+    questions?: (Question & { messageCount?: number })[];
+}
+
+export function CreatorCenter({ questions = [] }: CreatorCenterProps) {
     const { data: session } = useSession();
+    const router = useRouter();
 
     if (!session?.user) return null;
+
+    const handleGoProfile = () => {
+        router.push('/profile');
+    };
+
+    const handleGoRandomQuestion = () => {
+        let pool = questions;
+
+        if (pool.length === 0) {
+            try {
+                const raw = localStorage.getItem('agent-zhihu-questions');
+                if (raw) {
+                    const parsed = JSON.parse(raw) as { questions?: Question[] };
+                    pool = (parsed.questions || []) as (Question & { messageCount?: number })[];
+                }
+            } catch (error) {
+                console.error('Failed to load questions for random answer:', error);
+            }
+        }
+
+        if (pool.length === 0) {
+            router.push('/');
+            return;
+        }
+
+        const picked = pool[Math.floor(Math.random() * pool.length)];
+        router.push(`/question/${picked.id}`);
+    };
 
     return (
         <div className="bg-white rounded-[2px] shadow-sm border border-[var(--zh-border)] p-4 mb-[10px]">
@@ -33,10 +69,18 @@ export function CreatorCenter() {
 
             {/* Actions Grid */}
             <div className="grid grid-cols-2 gap-3">
-                <button className="flex items-center justify-center gap-1 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] text-[14px] rounded-[3px] hover:bg-[rgba(0,102,255,0.06)] transition-colors">
+                <button
+                    type="button"
+                    onClick={handleGoProfile}
+                    className="flex items-center justify-center gap-1 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] text-[14px] rounded-[3px] hover:bg-[rgba(0,102,255,0.06)] transition-colors"
+                >
                     进入创作中心 &gt;
                 </button>
-                <button className="flex items-center justify-center gap-1 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] text-[14px] rounded-[3px] hover:bg-[rgba(0,102,255,0.06)] transition-colors">
+                <button
+                    type="button"
+                    onClick={handleGoRandomQuestion}
+                    className="flex items-center justify-center gap-1 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] text-[14px] rounded-[3px] hover:bg-[rgba(0,102,255,0.06)] transition-colors"
+                >
                     等你来答 &gt;
                 </button>
             </div>

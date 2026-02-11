@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
+import { AppHeader } from '@/components/AppHeader';
 
 interface ProfileStats {
   questions: number;
@@ -10,6 +11,7 @@ interface ProfileStats {
   debates: number;
   upvotesReceived: number;
   likesGiven: number;
+  favorites: number;
   debateRecord: { wins: number; losses: number; ties: number };
   topTags: Array<{ tag: string; count: number }>;
   recentOpponents: Array<{
@@ -44,7 +46,7 @@ interface ActivityItem {
   author?: { name?: string };
 }
 
-type ActivityTab = 'questions' | 'answers' | 'debates' | 'likes';
+type ActivityTab = 'questions' | 'answers' | 'likes' | 'favorites';
 
 interface Badge {
   id: string;
@@ -55,13 +57,9 @@ interface Badge {
 }
 
 function getBadges(stats: ProfileStats): Badge[] {
-  const dr = stats.debateRecord || { wins: 0, losses: 0, ties: 0 };
-  const total = dr.wins + dr.losses + dr.ties;
   return [
     { id: 'first-q', icon: '💡', name: '初次发问', desc: '提出首个问题', unlocked: stats.questions >= 1 },
     { id: 'five-q', icon: '🔥', name: '好奇宝宝', desc: '提出5个问题', unlocked: stats.questions >= 5 },
-    { id: 'first-debate', icon: '⚔️', name: '初入擂台', desc: '完成首次辩论', unlocked: total >= 1 },
-    { id: 'win-3', icon: '🏆', name: '三连胜', desc: '赢得3场辩论', unlocked: dr.wins >= 3 },
     { id: 'answer-10', icon: '💬', name: '话题达人', desc: '发表10条回答', unlocked: stats.answers >= 10 },
     { id: 'liked-50', icon: '👍', name: '人气之星', desc: '获得50个赞', unlocked: stats.upvotesReceived >= 50 },
   ];
@@ -73,7 +71,6 @@ export default function ProfilePage() {
   const [secondMe, setSecondMe] = useState<SecondMeData | null>(null);
   const [activeTab, setActiveTab] = useState<ActivityTab>('questions');
   const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [activityTotal, setActivityTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -109,7 +106,6 @@ export default function ProfilePage() {
         } else {
           setActivity(prev => [...prev, ...(data.items || [])]);
         }
-        setActivityTotal(data.total || 0);
         setHasMore(data.hasMore || false);
       })
       .catch(console.error)
@@ -151,36 +147,28 @@ export default function ProfilePage() {
   const tabs: { key: ActivityTab; label: string }[] = [
     { key: 'questions', label: '我的提问' },
     { key: 'answers', label: '我的回答' },
-    { key: 'debates', label: '我的辩论' },
     { key: 'likes', label: '我的点赞' },
+    { key: 'favorites', label: '我的收藏' },
   ];
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-gray-500 hover:text-gray-700">← 返回</Link>
-            <h1 className="text-lg font-semibold text-gray-900">个人主页</h1>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+      <main className="max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-6 mt-[104px] md:mt-[52px] space-y-4">
         {/* Profile Card */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center gap-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5">
             {user.image ? (
-              <img src={user.image} alt="" className="w-20 h-20 rounded-full border-2 border-blue-500 object-cover" />
+              <img src={user.image} alt={`${user.name || '用户'}头像`} className="w-20 h-20 rounded-full border-2 border-blue-500 object-cover" />
             ) : (
               <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center text-2xl font-bold text-blue-600">
                 {user.name?.charAt(0) || '?'}
               </div>
             )}
-            <div>
+            <div className="min-w-0">
               <h2 className="text-xl font-bold text-[#121212]">{user.name}</h2>
-              {user.bio && <p className="text-[15px] text-[#646464] mt-1">{user.bio}</p>}
+              {user.bio && <p className="text-[14px] md:text-[15px] text-[#646464] mt-1 break-words">{user.bio}</p>}
               {user.email && <p className="text-sm text-[#8590A6] mt-0.5">{user.email}</p>}
               <span className="inline-flex items-center mt-2 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-600">
                 已连接 SecondMe
@@ -191,7 +179,7 @@ export default function ProfilePage() {
 
         {/* SecondMe Personality Panel */}
         {secondMe && (secondMe.shades?.length > 0 || secondMe.softMemory?.traits?.length || secondMe.softMemory?.interests?.length) && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5">
             <h3 className="text-sm font-medium text-gray-800 mb-3">SecondMe 人格画像</h3>
 
             {secondMe.softMemory?.traits && secondMe.softMemory.traits.length > 0 && (
@@ -243,57 +231,12 @@ export default function ProfilePage() {
             <p className="mt-1 text-2xl font-bold text-purple-600">{stats?.answers ?? '-'}</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-xs text-gray-500">辩论</p>
-            <p className="mt-1 text-2xl font-bold text-teal-600">{stats?.debates ?? '-'}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <p className="text-xs text-gray-500">获赞</p>
             <p className="mt-1 text-2xl font-bold text-amber-600">{stats?.upvotesReceived ?? '-'}</p>
           </div>
         </div>
 
-        {/* Debate Record & Tags Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* 辩论战绩 */}
-          {stats && stats.debateRecord && (stats.debateRecord.wins + stats.debateRecord.losses + stats.debateRecord.ties) > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-medium text-gray-800 mb-3">辩论战绩</h3>
-              <div className="flex items-center gap-6 mb-3">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{stats.debateRecord.wins}</p>
-                  <p className="text-xs text-gray-500">胜</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-red-500">{stats.debateRecord.losses}</p>
-                  <p className="text-xs text-gray-500">负</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-gray-400">{stats.debateRecord.ties}</p>
-                  <p className="text-xs text-gray-500">平</p>
-                </div>
-                <div className="ml-auto text-right">
-                  <p className="text-lg font-bold text-[#121212]">
-                    {Math.round((stats.debateRecord.wins / (stats.debateRecord.wins + stats.debateRecord.losses + stats.debateRecord.ties)) * 100)}%
-                  </p>
-                  <p className="text-xs text-gray-500">胜率</p>
-                </div>
-              </div>
-              {/* 胜负条 */}
-              <div className="flex h-2 rounded-full overflow-hidden bg-gray-100">
-                {stats.debateRecord.wins > 0 && (
-                  <div className="bg-green-500" style={{ width: `${(stats.debateRecord.wins / (stats.debateRecord.wins + stats.debateRecord.losses + stats.debateRecord.ties)) * 100}%` }} />
-                )}
-                {stats.debateRecord.ties > 0 && (
-                  <div className="bg-gray-300" style={{ width: `${(stats.debateRecord.ties / (stats.debateRecord.wins + stats.debateRecord.losses + stats.debateRecord.ties)) * 100}%` }} />
-                )}
-                {stats.debateRecord.losses > 0 && (
-                  <div className="bg-red-400" style={{ width: `${(stats.debateRecord.losses / (stats.debateRecord.wins + stats.debateRecord.losses + stats.debateRecord.ties)) * 100}%` }} />
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* 关注话题 */}
+        <div className="grid grid-cols-1 gap-4">
           {stats && stats.topTags && stats.topTags.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h3 className="text-sm font-medium text-gray-800 mb-3">关注话题</h3>
@@ -316,40 +259,11 @@ export default function ProfilePage() {
           )}
         </div>
 
-        {/* Recent Opponents */}
-        {stats && stats.recentOpponents && stats.recentOpponents.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-sm font-medium text-gray-800 mb-3">最近辩论对手</h3>
-            <div className="flex gap-3 overflow-x-auto pb-1">
-              {stats.recentOpponents.map((opp, i) => (
-                <div key={i} className="flex-shrink-0 w-36 p-3 rounded-lg bg-gray-50 border border-gray-100 text-center">
-                  {opp.avatar ? (
-                    <img src={opp.avatar} alt="" className="w-10 h-10 rounded-full mx-auto border border-gray-200 object-cover" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full mx-auto bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-500">
-                      {opp.name?.charAt(0) || '?'}
-                    </div>
-                  )}
-                  <p className="text-xs font-medium text-[#121212] mt-1.5 truncate">{opp.name}</p>
-                  <p className="text-[10px] text-[#8590A6] mt-0.5 truncate">{opp.topic}</p>
-                  <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] ${
-                    opp.result === 'user' ? 'bg-green-100 text-green-700' :
-                    opp.result === 'opponent' ? 'bg-red-100 text-red-600' :
-                    'bg-gray-100 text-gray-500'
-                  }`}>
-                    {opp.result === 'user' ? '胜' : opp.result === 'opponent' ? '负' : '平'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Achievement Badges */}
         {stats && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5">
             <h3 className="text-sm font-medium text-gray-800 mb-3">成就徽章</h3>
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               {getBadges(stats).map(badge => (
                 <div
                   key={badge.id}
@@ -370,19 +284,19 @@ export default function ProfilePage() {
 
         {/* Activity Tabs */}
         <div className="bg-white rounded-xl border border-gray-200">
-          <div className="flex border-b border-gray-200">
+          <div className="flex border-b border-gray-200 overflow-x-auto">
             {tabs.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
-                className={`px-5 py-3 text-sm font-medium transition-colors ${
+                className={`px-4 md:px-5 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === tab.key
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {tab.label}
-                {stats && <span className="ml-1 text-xs text-gray-400">({tab.key === 'likes' ? stats.likesGiven : stats[tab.key]})</span>}
+                {stats && <span className="ml-1 text-xs text-gray-400">({tab.key === 'likes' ? stats.likesGiven : tab.key === 'favorites' ? stats.favorites : stats[tab.key]})</span>}
               </button>
             ))}
           </div>
@@ -402,7 +316,7 @@ export default function ProfilePage() {
                   <div key={item.id || item._id || idx} className="px-4 py-3 hover:bg-gray-50 transition-colors">
                     {activeTab === 'questions' && (
                       <div>
-                        <Link href={`/question/${item.id}`} className="text-sm font-medium text-[#121212] hover:text-blue-600">
+                        <Link href={`/question/${item.id || item._id}`} className="text-sm font-medium text-[#121212] hover:text-blue-600">
                           {item.title}
                         </Link>
                         {item.description && (
@@ -430,32 +344,14 @@ export default function ProfilePage() {
                       </div>
                     )}
 
-                    {activeTab === 'debates' && (
-                      <div>
-                        <p className="text-sm font-medium text-[#121212]">{item.topic}</p>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-[#8590A6]">
-                          <span className={`px-1.5 py-0.5 rounded text-xs ${
-                            item.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {item.status === 'completed' ? '已完成' : '进行中'}
-                          </span>
-                          <span>{(item.messages as Array<unknown>)?.length || 0} 轮对话</span>
-                          <span>{formatTime(item.createdAt)}</span>
-                        </div>
-                        {item.synthesis?.conclusion && (
-                          <p className="text-xs text-[#646464] mt-1 line-clamp-2">{item.synthesis.conclusion}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {activeTab === 'likes' && (
+                    {(activeTab === 'likes' || activeTab === 'favorites') && (
                       <div>
                         {item._type === 'question' ? (
                           <>
                             <div className="flex items-center gap-1.5 mb-1">
                               <span className="px-1.5 py-0.5 text-[10px] rounded bg-blue-50 text-blue-600">问题</span>
                             </div>
-                            <Link href={`/question/${item.id}`} className="text-sm font-medium text-[#121212] hover:text-blue-600">
+                            <Link href={`/question/${item.id || item._id}`} className="text-sm font-medium text-[#121212] hover:text-blue-600">
                               {item.title}
                             </Link>
                             {item.description && (
@@ -480,6 +376,7 @@ export default function ProfilePage() {
                         )}
                         <div className="flex items-center gap-3 mt-1.5 text-xs text-[#8590A6]">
                           <span>{item.upvotes || 0} 赞</span>
+                          {activeTab === 'favorites' && <span>已收藏</span>}
                           <span>{formatTime(item.createdAt)}</span>
                         </div>
                       </div>
