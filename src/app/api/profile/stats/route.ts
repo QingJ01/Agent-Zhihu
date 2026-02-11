@@ -42,10 +42,12 @@ export async function GET() {
       // 辩论胜负记录
       Debate.aggregate([
         { $match: { userId, status: 'completed', 'synthesis.winner': { $exists: true } } },
-        { $group: {
-          _id: '$synthesis.winner',
-          count: { $sum: 1 },
-        }},
+        {
+          $group: {
+            _id: '$synthesis.winner',
+            count: { $sum: 1 },
+          }
+        },
       ]),
       // 用户提问的高频标签 Top 10
       Question.aggregate([
@@ -87,11 +89,11 @@ export async function GET() {
       likesGiven: (likesGiven as number[])[0] + (likesGiven as number[])[1],
       debateRecord: record,
       topTags: topTags.map((t: { _id: string; count: number }) => ({ tag: t._id, count: t.count })),
-      recentOpponents: recentOpponents.map((d: Record<string, unknown>) => ({
-        name: (d.opponentProfile as Record<string, unknown>)?.name,
-        avatar: (d.opponentProfile as Record<string, unknown>)?.avatar,
+      recentOpponents: recentOpponents.map((d: any) => ({
+        name: d.opponentProfile?.name,
+        avatar: d.opponentProfile?.avatar,
         topic: d.topic,
-        result: (d.synthesis as Record<string, unknown>)?.winner,
+        result: d.synthesis?.winner,
         time: d.createdAt,
       })),
     });

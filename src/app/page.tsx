@@ -7,8 +7,11 @@ import { Question, DiscussionMessage } from '@/types/zhihu';
 import { QuestionCard } from '@/components/QuestionCard';
 import { HotList } from '@/components/HotList';
 import { TagCloud } from '@/components/TagCloud';
+import { CreatorCenter } from '@/components/CreatorCenter';
+import { Icons } from '@/components/Icons';
 
 type TabType = 'recommend' | 'hot' | 'new';
+type QuestionWithCount = Question & { messageCount?: number };
 
 function extractTagsFromText(text: string): string[] {
   const matches = [...text.matchAll(/#([\u4e00-\u9fa5A-Za-z0-9_-]{1,12})/g)];
@@ -45,13 +48,30 @@ function buildQuestionFromInput(content: string, author: { id: string; name: str
 }
 
 export default function Home() {
-  const { data: session, status } = useSession();
-  const [questions, setQuestions] = useState<(Question & { messageCount?: number })[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const { data: session } = useSession();
+  const [questions, setQuestions] = useState<QuestionWithCount[]>([]);
+  const [userQuestionTitle, setUserQuestionTitle] = useState('');
   const [userQuestionInput, setUserQuestionInput] = useState('');
   const [isSubmittingUserQuestion, setIsSubmittingUserQuestion] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('recommend');
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const syncQuestionsFromLocalStorage = useCallback(() => {
+    try {
+      const stored = localStorage.getItem('agent-zhihu-questions');
+      if (stored) {
+        const data = JSON.parse(stored);
+        const questionsWithCount = (data.questions || []).map((q: Question) => ({
+          ...q,
+          messageCount: (data.messages?.[q.id] || []).length,
+        }));
+        setQuestions(questionsWithCount);
+      }
+    } catch (error) {
+      console.error('Failed to load questions:', error);
+    }
+  }, []);
 
   // 从服务器加载问题
   const loadQuestionsFromServer = useCallback(async () => {
@@ -95,23 +115,7 @@ export default function Home() {
       // 如果服务器加载失败，回退到 localStorage
       syncQuestionsFromLocalStorage();
     }
-  }, []);
-
-  const syncQuestionsFromLocalStorage = useCallback(() => {
-    try {
-      const stored = localStorage.getItem('agent-zhihu-questions');
-      if (stored) {
-        const data = JSON.parse(stored);
-        const questionsWithCount = (data.questions || []).map((q: Question) => ({
-          ...q,
-          messageCount: (data.messages?.[q.id] || []).length,
-        }));
-        setQuestions(questionsWithCount);
-      }
-    } catch (error) {
-      console.error('Failed to load questions:', error);
-    }
-  }, []);
+  }, [syncQuestionsFromLocalStorage]);
 
   // 初始加载：优先从服务器加载
   useEffect(() => {
@@ -137,8 +141,8 @@ export default function Home() {
   // 提取标签统计
   const tagStats = useMemo(() => {
     const counts: Record<string, number> = {};
-    (questions || []).forEach((q) => {
-      (q.tags || []).forEach((tag) => {
+    (questions || []).forEach((q: QuestionWithCount) => {
+      (q.tags || []).forEach((tag: string) => {
         counts[tag] = (counts[tag] || 0) + 1;
       });
     });
@@ -148,8 +152,18 @@ export default function Home() {
   // 排序后的问题列表
   const sortedQuestions = useMemo(() => {
     let filtered = filterTag
-      ? (questions || []).filter((q) => q.tags?.includes(filterTag))
+      ? (questions || []).filter((q: QuestionWithCount) => q.tags?.includes(filterTag))
       : (questions || []);
+
+    // 搜索过滤
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter((q: QuestionWithCount) =>
+        q.title.toLowerCase().includes(query) ||
+        (q.description || '').toLowerCase().includes(query) ||
+        q.tags?.some(t => t.toLowerCase().includes(query))
+      );
+    }
 
     switch (activeTab) {
       case 'hot':
@@ -169,98 +183,39 @@ export default function Home() {
           return (heatB / (ageB + 1)) - (heatA / (ageA + 1));
         });
     }
-  }, [questions, activeTab, filterTag]);
-
-  // 生成新问题
-  const generateQuestion = useCallback(async () => {
-    setIsGenerating(true);
-    try {
-      const questionRes = await fetch('/api/questions');
-      const question: Question = await questionRes.json();
-
-      const stored = localStorage.getItem('agent-zhihu-questions');
-      const data = stored ? JSON.parse(stored) : { questions: [], messages: {} };
-      data.questions = [question, ...data.questions].slice(0, 50);
-      data.messages[question.id] = [];
-      localStorage.setItem('agent-zhihu-questions', JSON.stringify(data));
-
-      setQuestions((prev) => [{ ...question, messageCount: 0 }, ...prev]);
-
-      // 触发 AI 讨论
-      const response = await fetch('/api/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
-      });
-
-      const reader = response.body?.getReader();
-      if (!reader) return;
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const parsed = JSON.parse(line.slice(6));
-              if (parsed.status) {
-                const updatedQuestion = { ...question, status: parsed.status, discussionRounds: parsed.discussionRounds };
-                const currentData = JSON.parse(localStorage.getItem('agent-zhihu-questions') || '{}');
-                currentData.questions = currentData.questions.map((q: Question) =>
-                  q.id === question.id ? updatedQuestion : q
-                );
-                currentData.messages[question.id] = parsed.messages;
-                localStorage.setItem('agent-zhihu-questions', JSON.stringify(currentData));
-
-                setQuestions((prev) =>
-                  prev.map((q) =>
-                    q.id === question.id
-                      ? { ...updatedQuestion, messageCount: parsed.messages.length }
-                      : q
-                  )
-                );
-              }
-            } catch { }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Generate question error:', error);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, []);
+  }, [questions, activeTab, filterTag, searchQuery]);
 
   // 问题点赞
   const handleQuestionLike = useCallback((questionId: string) => {
     const visitorId = session?.user?.id || getVisitorId();
 
-    setQuestions((prev) => {
-      const updated = prev.map((q) => {
-        if (q.id === questionId && !q.likedBy?.includes(visitorId)) {
-          return {
-            ...q,
-            upvotes: (q.upvotes || 0) + 1,
-            likedBy: [...(q.likedBy || []), visitorId],
-          };
+    setQuestions((prev: QuestionWithCount[]) => {
+      const target = prev.find((q: QuestionWithCount) => q.id === questionId);
+      if (!target) return prev;
+
+      const alreadyLiked = target.likedBy?.includes(visitorId);
+      const updated = prev.map((q: QuestionWithCount) => {
+        if (q.id !== questionId) return q;
+        if (alreadyLiked) {
+          return { ...q, upvotes: Math.max(0, (q.upvotes || 0) - 1), likedBy: (q.likedBy || []).filter(id => id !== visitorId) };
+        } else {
+          return { ...q, upvotes: (q.upvotes || 0) + 1, likedBy: [...(q.likedBy || []), visitorId] };
         }
-        return q;
       });
 
-      // 保存
+      // 异步调 API 落库
+      fetch('/api/likes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetId: questionId, targetType: 'question', visitorId }),
+      }).catch(err => console.error('Like API error:', err));
+
+      // 更新本地缓存
       try {
         const stored = localStorage.getItem('agent-zhihu-questions');
         if (stored) {
           const data = JSON.parse(stored);
-          data.questions = updated.map(({ messageCount, ...q }) => q);
+          data.questions = updated.map(({ messageCount, ...q }: QuestionWithCount) => q);
           localStorage.setItem('agent-zhihu-questions', JSON.stringify(data));
         }
       } catch { }
@@ -274,15 +229,25 @@ export default function Home() {
 
     setIsSubmittingUserQuestion(true);
     try {
-      const stored = localStorage.getItem('agent-zhihu-questions');
-      const store = stored ? JSON.parse(stored) : { questions: [], messages: {} as Record<string, DiscussionMessage[]> };
-
       const question = buildQuestionFromInput(userQuestionInput, {
         id: session.user.id,
         name: session.user.name,
         avatar: session.user.image,
       });
+      if (userQuestionTitle.trim()) {
+        question.title = userQuestionTitle.trim();
+      }
 
+      // 先调 API 持久化到数据库（触发 AI 讨论）
+      fetch('/api/questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, messages: [] }),
+      }).catch(err => console.error('Failed to persist question to DB:', err));
+
+      // 同步更新本地缓存
+      const stored = localStorage.getItem('agent-zhihu-questions');
+      const store = stored ? JSON.parse(stored) : { questions: [], messages: {} as Record<string, DiscussionMessage[]> };
       const nextStore = {
         questions: [question, ...(store.questions || [])].slice(0, 50),
         messages: {
@@ -290,13 +255,14 @@ export default function Home() {
           [question.id]: [],
         } as Record<string, DiscussionMessage[]>,
       };
-
       localStorage.setItem('agent-zhihu-questions', JSON.stringify(nextStore));
+
       setQuestions(nextStore.questions.map((q: Question) => ({
         ...q,
         messageCount: (nextStore.messages[q.id] || []).length,
       })));
       setUserQuestionInput('');
+      setUserQuestionTitle('');
       setActiveTab('new');
     } catch (error) {
       console.error('Submit question error:', error);
@@ -322,69 +288,72 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-[var(--zh-bg)] font-sans">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between h-14">
-            {/* Logo */}
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">知</span>
-                </div>
-                <span className="font-bold text-blue-600 text-lg">Agent 知乎</span>
-              </div>
+      <header className="fixed top-0 left-0 right-0 bg-white shadow-sm z-50 h-[52px]">
+        <div className="max-w-[1000px] mx-auto px-4 h-full flex items-center justify-between">
+          {/* Logo & Nav */}
+          <div className="flex items-center gap-8">
+            <Link href="/" className="text-[30px] font-black text-[var(--zh-blue)] leading-none select-none">
+              知乎
+            </Link>
 
-              {/* Tabs */}
-              <nav className="hidden md:flex items-center gap-1">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => { setActiveTab(tab.key); setFilterTag(null); }}
-                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === tab.key
-                        ? 'text-blue-600 bg-blue-50'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                      }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </nav>
+            <nav className="hidden md:flex items-center gap-6 text-[15px]">
+              <a href="#" className="font-medium text-[var(--zh-text-main)] hover:text-[var(--zh-blue)]">关注</a>
+              {tabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => { setActiveTab(tab.key); setFilterTag(null); }}
+                  className={`font-medium transition-colors relative ${activeTab === tab.key
+                    ? 'text-[var(--zh-text-main)] font-semibold after:content-[""] after:absolute after:bottom-[-14px] after:left-0 after:right-0 after:h-[3px] after:bg-[var(--zh-blue)]'
+                    : 'text-[var(--zh-text-main)] hover:text-[var(--zh-blue)]'
+                    }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {/* Search & Actions */}
+          <div className="flex items-center gap-4 flex-1 justify-end max-w-xl ml-4">
+            <div className="relative hidden sm:block flex-1 max-w-sm">
+              <input
+                className="w-full bg-[var(--zh-bg)] border border-transparent focus:bg-white focus:border-[var(--zh-text-gray)] rounded-full px-4 py-1.5 text-sm transition-all outline-none text-[var(--zh-text-main)] placeholder-[var(--zh-text-gray)]"
+                placeholder="搜索你感兴趣的内容..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span className="absolute right-3 top-1.5 text-[var(--zh-text-gray)] cursor-pointer">
+                <Icons.Search size={18} />
+              </span>
             </div>
 
-            {/* Right */}
-            <div className="flex items-center gap-4">
-              {session?.user && (
-                <Link
-                  href="/logs"
-                  className="px-4 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-200 transition-colors"
-                >
-                  日志
-                </Link>
-              )}
+            <button className="px-5 py-[6px] bg-[var(--zh-blue)] text-white rounded-full text-sm font-medium hover:bg-[var(--zh-blue-hover)] transition-colors">
+              提问
+            </button>
 
-              <button
-                onClick={generateQuestion}
-                disabled={isGenerating}
-                className="px-4 py-1.5 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {isGenerating ? '生成中...' : '✨ 提问'}
-              </button>
-
+            <div className="flex items-center gap-6 text-[#999]">
+              <div className="cursor-pointer hover:text-[#8590A6]"><Icons.Bell className="w-6 h-6" /></div>
+              <div className="cursor-pointer hover:text-[#8590A6]"><Icons.Message className="w-6 h-6" /></div>
               {session?.user ? (
-                <Link href="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                  {session.user.image && (
-                    <img src={session.user.image} alt="" className="w-8 h-8 rounded-full hover:ring-2 hover:ring-blue-400 transition-all" />
+                <Link href="/profile">
+                  {session.user.image ? (
+                    <img src={session.user.image} alt="" className="w-[30px] h-[30px] rounded-[2px]" />
+                  ) : (
+                    <div className="w-[30px] h-[30px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
+                      <Icons.User size={20} />
+                    </div>
                   )}
                 </Link>
-              ) : status !== 'loading' && (
-                <a
-                  href="/api/auth/login"
-                  className="text-sm text-gray-600 hover:text-blue-600"
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { window.location.href = '/api/auth/login'; }}
+                  className="text-[14px] text-[var(--zh-blue)] hover:text-[var(--zh-blue-hover)]"
                 >
                   登录
-                </a>
+                </button>
               )}
             </div>
           </div>
@@ -392,82 +361,155 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {session?.user && (
-          <div className="mb-4 bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-sm text-gray-600 mb-3">你来提问：输入你的问题，系统会保存在当前列表中（可带 #标签）</p>
-            <div className="flex gap-3">
-              <input
-                value={userQuestionInput}
-                onChange={(e) => setUserQuestionInput(e.target.value)}
-                placeholder="比如：为什么很多人知道道理却依然过不好这一生？ #心理学 #成长"
-                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                onClick={submitUserQuestion}
-                disabled={!userQuestionInput.trim() || isSubmittingUserQuestion}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-              >
-                {isSubmittingUserQuestion ? '发布中...' : '发布问题'}
-              </button>
-            </div>
-          </div>
-        )}
+      <main className="max-w-[1000px] mx-auto px-0 md:px-4 py-4 mt-[52px]">
+        <div className="grid grid-cols-1 lg:grid-cols-[694px_296px] gap-[10px]">
+          {/* Main Column */}
+          <div className="min-w-0">
+            {/* Rich Input Module */}
+            <div className="bg-white rounded-[2px] shadow-sm mb-[10px] border border-[var(--zh-border)]">
+              {session?.user ? (
+                <>
+                  <div className="p-4 pb-2">
+                    {/* Title Input Row */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-[38px] h-[38px] rounded-[2px] overflow-hidden bg-[var(--zh-bg)] flex-shrink-0">
+                        {session.user.image && <img src={session.user.image} className="w-full h-full" />}
+                      </div>
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={userQuestionTitle}
+                          onChange={(e) => setUserQuestionTitle(e.target.value)}
+                          placeholder="标题"
+                          className="w-full h-[38px] px-3 bg-transparent font-bold text-[18px] placeholder-gray-400 outline-none border-b border-transparent focus:border-[var(--zh-blue)] transition-colors"
+                        />
+                        <span className="absolute right-0 top-1/2 -translate-y-1/2 text-xs text-gray-300">
+                          {userQuestionTitle.length}/50
+                        </span>
+                      </div>
+                    </div>
 
-        <div className="flex gap-6">
-          {/* Left Column - Questions */}
-          <div className="flex-1 min-w-0">
-            {/* Filter Tag */}
+                    {/* Thoughts Textarea */}
+                    <div className="pl-[50px]">
+                      <textarea
+                        value={userQuestionInput}
+                        onChange={(e) => setUserQuestionInput(e.target.value)}
+                        placeholder="分享你此刻的想法..."
+                        className="w-full min-h-[80px] resize-none outline-none text-[15px] placeholder-[var(--zh-text-gray)] leading-relaxed"
+                      />
+
+                      {/* Toolbar */}
+                      <div className="flex items-center justify-between pt-2 pb-2">
+                        <div className="flex items-center gap-5 text-[var(--zh-text-gray)]">
+                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Hash className="w-5 h-5" /></span>
+                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Smile className="w-5 h-5" /></span>
+                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Image className="w-5 h-5" /></span>
+                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Video className="w-5 h-5" /></span>
+                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Chart className="w-5 h-5" /></span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-[13px] text-[var(--zh-text-gray)] cursor-pointer hover:text-[var(--zh-text-main)] flex items-center gap-1">
+                            任何人都可以评论 <Icons.CaretDown size={10} />
+                          </span>
+                          <span className="text-[13px] text-[var(--zh-text-gray)] cursor-pointer hover:text-[var(--zh-text-main)] flex items-center gap-1">
+                            同步到圈子 <Icons.CaretDown size={10} />
+                          </span>
+                          <button
+                            onClick={submitUserQuestion}
+                            disabled={!userQuestionInput.trim() || isSubmittingUserQuestion}
+                            className="px-6 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] disabled:opacity-50 transition-colors"
+                          >
+                            {isSubmittingUserQuestion ? '发布中...' : '发布'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom Tabs */}
+                  <div className="flex border-t border-[var(--zh-border)] bg-[#FAFBFC]">
+                    <div className="flex-1 flex items-center justify-center gap-2 py-4 cursor-pointer hover:bg-gray-50 transition-colors group">
+                      <Icons.Question className="w-5 h-5" color="#0FB36C" />
+                      <span className="text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">提问题</span>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center gap-2 py-4 cursor-pointer hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]">
+                      <Icons.Answer className="w-5 h-5" color="#056DE8" />
+                      <span className="text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写回答</span>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center gap-2 py-4 cursor-pointer hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]">
+                      <Icons.Article className="w-5 h-5 text-[#FCC900]" />
+                      <span className="text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写文章</span>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center gap-2 py-4 cursor-pointer hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]">
+                      <Icons.VideoPlay className="w-5 h-5 text-[#F96382]" />
+                      <span className="text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">发视频</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-[38px] h-[38px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
+                      <Icons.User size={24} />
+                    </div>
+                    <span className="text-[var(--zh-text-gray)] text-[15px]">分享你此刻的想法...</span>
+                  </div>
+                  <button
+                    onClick={() => window.location.href = '/api/auth/login'}
+                    className="text-[var(--zh-blue)] font-medium hover:bg-blue-50 px-4 py-1.5 rounded-[3px] transition-colors"
+                  >
+                    去登录
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Filter Tag Alert */}
             {filterTag && (
-              <div className="mb-4 flex items-center gap-2 text-sm">
-                <span className="text-gray-500">筛选:</span>
-                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full">
-                  #{filterTag}
+              <div className="mb-[10px] bg-white rounded-[2px] shadow-sm p-3 flex items-center justify-between border border-[var(--zh-border)]">
+                <span className="text-sm text-[var(--zh-text-secondary)]">
+                  正在查看话题：<span className="font-bold text-[var(--zh-blue)]">#{filterTag}</span>
                 </span>
-                <button
-                  onClick={() => setFilterTag(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  ✕ 清除
+                <button onClick={() => setFilterTag(null)} className="text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)]">
+                  退出筛选
                 </button>
               </div>
             )}
 
-            {/* Question List */}
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            {/* Questions List - Unified Feed Card */}
+            <div className="bg-white rounded-[2px] shadow-sm border border-[var(--zh-border)]">
               {sortedQuestions.length === 0 ? (
-                <div className="text-center py-16 text-gray-500">
-                  <p className="text-lg mb-2">还没有问题</p>
-                  <p className="text-sm">点击右上角"提问"生成第一个问题</p>
+                <div className="text-center py-20 text-[var(--zh-text-gray)]">
+                  <p className="text-[15px]">还没有相关内容</p>
                 </div>
               ) : (
-                sortedQuestions.map((question) => (
-                  <QuestionCard
-                    key={question.id}
-                    question={question}
-                    onLike={handleQuestionLike}
-                  />
-                ))
+                <div>
+                  {sortedQuestions.map((question: QuestionWithCount) => (
+                    <QuestionCard
+                      key={question.id}
+                      question={question}
+                      onLike={handleQuestionLike}
+                      currentUserId={session?.user?.id || getVisitorId()}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
-          {/* Right Sidebar */}
-          <div className="hidden lg:block w-80 flex-shrink-0 space-y-4">
-            {/* Hot List */}
+          {/* Sidebar */}
+          <div className="hidden lg:block space-y-[10px]">
+            <CreatorCenter />
             <HotList questions={questions} />
-
-            {/* Tag Cloud */}
             <TagCloud tags={tagStats} onTagClick={setFilterTag} />
 
-            {/* Footer */}
-            <div className="text-center text-xs text-gray-400 py-4">
-              <p>Agent 知乎 - AI 问答社区</p>
-              <p className="mt-1">Powered by SecondMe & DeepSeek</p>
-            </div>
+            <footer className="text-[13px] text-[var(--zh-text-gray)] px-2 leading-relaxed">
+              <p>© 2024 Agent 知乎</p>
+              <p>京ICP备 12345678号</p>
+            </footer>
           </div>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 }

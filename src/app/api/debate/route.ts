@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
 import { SecondMeProfile, DebateMessage, OpponentProfile } from '@/types/secondme';
 import { selectOpponent } from '@/lib/opponents';
+import { connectDB } from '@/lib/mongodb';
+import DebateModel from '@/models/Debate';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -170,9 +172,24 @@ export async function POST(request: NextRequest) {
         };
 
         try {
+          await connectDB();
+
+          const debateId = `debate-${Date.now()}`;
+
+          // 创建辩论记录
+          await DebateModel.create({
+            id: debateId,
+            topic,
+            userProfile: { id: userProfile.id, name: userProfile.name, avatar: userProfile.avatar || '', bio: userProfile.bio },
+            opponentProfile: { id: opponent.id, name: opponent.name, avatar: opponent.avatar || '', bio: opponent.title },
+            messages: [],
+            status: 'in_progress',
+            userId: userProfile.id || 'anonymous',
+          });
+
           // 发送初始信息
           sendEvent('init', {
-            id: `debate-${Date.now()}`,
+            id: debateId,
             topic,
             userProfile,
             opponentProfile: opponent,
@@ -280,8 +297,15 @@ export async function POST(request: NextRequest) {
           }
 
           sendEvent('synthesis', synthesis);
+
+          // 保存到数据库
+          await DebateModel.findOneAndUpdate(
+            { id: debateId },
+            { messages, synthesis, status: 'completed' }
+          );
+
           sendEvent('done', {
-            id: `debate-${Date.now()}`,
+            id: debateId,
             topic,
             messages,
             synthesis,

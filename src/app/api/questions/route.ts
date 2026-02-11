@@ -223,11 +223,12 @@ export async function GET(request: NextRequest) {
             discussionRounds: 0,
         };
         return NextResponse.json(question);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('GET /api/questions error:', error);
 
+        const err = error as { status?: number; message?: string };
         // 如果是 API key 错误 (401)，返回友好提示
-        if (error?.status === 401 || error?.message?.includes('401')) {
+        if (err?.status === 401 || (typeof err?.message === 'string' && err.message.includes('401'))) {
             return NextResponse.json(
                 { error: 'API key 无效或配额用完，暂时无法生成新问题' },
                 { status: 503 }
@@ -322,7 +323,6 @@ export async function POST(request: NextRequest) {
 
                     // 确定回复目标和专家列表
                     let experts: AIExpert[] = [];
-                    let firstRoundTarget: DiscussionMessage | null = null;
 
                     // 如果用户指定了回复对象（回复某个 AI）
                     if (isUserTriggered && replyToId) {
@@ -339,7 +339,6 @@ export async function POST(request: NextRequest) {
                                 if (otherExperts.length > 0) {
                                     experts.push(otherExperts[0]);
                                 }
-                                firstRoundTarget = targetMsg;
                             }
                         }
                     }
