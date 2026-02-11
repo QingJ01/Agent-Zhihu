@@ -1,8 +1,7 @@
-'use client';
-
 import { useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DiscussionMessage, AIExpert } from '@/types/zhihu';
+import { Icons } from '@/components/Icons';
 
 interface AnswerCardProps {
     message: DiscussionMessage;
@@ -47,7 +46,7 @@ export function AnswerCard({ message, isTyping, allMessages, onLike, onReply }: 
     }, [isTyping, isLiked, message.id, onLike]);
 
     return (
-        <div className="bg-white p-5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/30 transition-colors">
+        <div className="bg-white p-5 border-b border-[var(--zh-border)] last:border-b-0 hover:shadow-[0_1px_3px_rgba(18,18,18,0.1)] transition-shadow">
             {/* Top Author Bar */}
             <div className="flex items-center gap-3 mb-3">
                 <div className="relative">
@@ -88,27 +87,43 @@ export function AnswerCard({ message, isTyping, allMessages, onLike, onReply }: 
             {/* Bottom Actions */}
             {!isTyping && (
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={handleLike}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[3px] text-sm font-medium transition-colors ${isLiked
-                                ? 'bg-[#0066FF] text-white'
-                                : 'bg-[#EBF5FF] text-[#0066FF] hover:bg-[#d9efff]'
-                            }`}
-                    >
-                        <span className="text-[10px]">▲</span>
-                        <span>{isLiked ? `已赞同 ${likeCount}` : `赞同 ${likeCount}`}</span>
-                    </button>
-
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-[3px] text-sm text-[#8590A6] hover:text-[#646464] hover:bg-gray-100 transition-colors">
-                        <span className="text-[10px]">▼</span>
-                    </button>
+                    <div className="flex items-center rounded-[3px] overflow-hidden">
+                        <button
+                            onClick={handleLike}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors ${isLiked
+                                ? 'bg-[var(--zh-blue)] text-white'
+                                : 'bg-[rgba(0,102,255,0.1)] text-[var(--zh-blue)] hover:bg-[rgba(0,102,255,0.15)]'
+                                }`}
+                        >
+                            <Icons.Upvote size={12} filled={isLiked} />
+                            <span>{isLiked ? `已赞同 ${likeCount}` : `赞同 ${likeCount}`}</span>
+                        </button>
+                        <button
+                            className={`px-2 py-1.5 text-sm font-medium transition-colors ml-[2px] ${isLiked
+                                ? 'bg-[var(--zh-blue)] text-white'
+                                : 'bg-[rgba(0,102,255,0.1)] text-[var(--zh-blue)] hover:bg-[rgba(0,102,255,0.15)]'
+                                }`}
+                        >
+                            <Icons.Downvote size={12} filled={isLiked} />
+                        </button>
+                    </div>
 
                     <button
                         onClick={() => onReply?.(message)}
-                        className="flex items-center gap-1 text-sm text-[#8590A6] hover:text-[#646464] px-2 py-1"
+                        className="flex items-center gap-1.5 text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
                     >
-                        <span className="text-[14px]">💬</span>
+                        <Icons.Comment size={18} className="text-[#8590A6]" />
                         <span>{replyToName ? '查看对话' : '回复'}</span>
+                    </button>
+
+                    <button className="flex items-center gap-1.5 text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0">
+                        <Icons.Share size={18} className="text-[#8590A6]" />
+                        <span>分享</span>
+                    </button>
+
+                    <button className="flex items-center gap-1.5 text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0">
+                        <Icons.Favorite size={18} className="text-[#8590A6]" />
+                        <span>收藏</span>
                     </button>
 
                     <span className="text-sm text-[#8590A6] ml-auto">

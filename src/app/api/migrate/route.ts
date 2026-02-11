@@ -4,10 +4,37 @@ import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 import DebateModel from '@/models/Debate';
 
+type ImportedQuestion = {
+    id?: string;
+    createdAt?: number | string | Date;
+    [key: string]: unknown;
+};
+
+type ImportedMessage = {
+    id?: string;
+    questionId?: string;
+    createdAt?: number | string | Date;
+    [key: string]: unknown;
+};
+
+type ImportedDebate = {
+    id?: string;
+    userId?: string;
+    userProfile?: { id?: string; name?: string };
+    createdAt?: number | string | Date;
+    [key: string]: unknown;
+};
+
+type MigrationPayload = {
+    questions?: ImportedQuestion[];
+    messages?: ImportedMessage[] | Record<string, ImportedMessage[]>;
+    debates?: ImportedDebate[];
+};
+
 // POST: 批量导入数据
 export async function POST(request: NextRequest) {
     try {
-        const { questions, messages, debates } = await request.json();
+        const { questions, messages, debates } = (await request.json()) as MigrationPayload;
 
         if (!questions && !messages && !debates) {
             return NextResponse.json(
@@ -51,13 +78,13 @@ export async function POST(request: NextRequest) {
         // 导入消息
         if (messages) {
             // messages 可能是 { questionId: [messages] } 格式
-            const allMessages: any[] = [];
+            const allMessages: ImportedMessage[] = [];
 
             if (Array.isArray(messages)) {
                 allMessages.push(...messages);
-            } else if (typeof messages === 'object') {
+            } else if (messages && typeof messages === 'object') {
                 // 从 { questionId: [messages] } 格式提取
-                Object.values(messages).forEach((msgs: any) => {
+                Object.values(messages).forEach((msgs) => {
                     if (Array.isArray(msgs)) {
                         allMessages.push(...msgs);
                     }
@@ -169,7 +196,7 @@ export async function GET(request: NextRequest) {
         }));
 
         // 按 questionId 组织消息
-        const messagesByQuestion: Record<string, any[]> = {};
+        const messagesByQuestion: Record<string, ImportedMessage[]> = {};
         formattedMessages.forEach(m => {
             if (!messagesByQuestion[m.questionId]) {
                 messagesByQuestion[m.questionId] = [];

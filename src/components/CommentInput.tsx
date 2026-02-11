@@ -18,12 +18,13 @@ export function CommentInput({ onSubmit, disabled, placeholder }: CommentInputPr
         return (
             <div className="bg-gray-50 rounded-xl p-6 text-center">
                 <p className="text-gray-500 mb-3">登录后参与讨论</p>
-                <a
-                    href="/api/auth/login"
+                <button
+                    type="button"
+                    onClick={() => { window.location.href = '/api/auth/login'; }}
                     className="inline-block px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-medium hover:shadow-lg transition-all"
                 >
                     用 SecondMe 登录
-                </a>
+                </button>
             </div>
         );
     }

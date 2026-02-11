@@ -99,6 +99,7 @@ export default function ProfilePage() {
   // Fetch activity
   useEffect(() => {
     if (!session?.user) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetch(`/api/profile/activity?type=${activeTab}&page=${page}&limit=10`)
       .then(res => res.json())
@@ -115,11 +116,12 @@ export default function ProfilePage() {
       .finally(() => setLoading(false));
   }, [session, activeTab, page]);
 
-  // Reset page when tab changes
-  useEffect(() => {
+  const handleTabChange = (tab: ActivityTab) => {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
     setPage(1);
     setActivity([]);
-  }, [activeTab]);
+  };
 
   function formatTime(ts: string | number | undefined) {
     if (!ts) return '';
@@ -372,7 +374,7 @@ export default function ProfilePage() {
             {tabs.map(tab => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => handleTabChange(tab.key)}
                 className={`px-5 py-3 text-sm font-medium transition-colors ${
                   activeTab === tab.key
                     ? 'text-blue-600 border-b-2 border-blue-600'

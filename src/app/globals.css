@@ -3,14 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --zh-blue: #056DE8;
+  --zh-blue-hover: #005BD4;
+  --zh-bg: #F6F6F6;
+  --zh-card-bg: #FFFFFF;
+  --zh-text-main: #121212;
+  --zh-text-gray: #8590A6;
+  --zh-text-secondary: #444444;
+  --zh-border: #F0F2F7;
+  --zh-shadow: 0 1px 3px rgba(18, 18, 18, 0.1);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--zh-bg);
+  color: var(--zh-text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Custom Animations */
@@ -19,6 +27,7 @@ body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -30,6 +39,7 @@ body {
     opacity: 0;
     transform: translateX(-20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -41,6 +51,7 @@ body {
     opacity: 0;
     transform: translateX(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -48,9 +59,12 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }

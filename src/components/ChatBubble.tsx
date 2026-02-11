@@ -69,6 +69,7 @@ export function ChatList({ messages, userAvatar, opponentAvatar, isGenerating, c
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
 
+
   return (
     <div className="flex flex-col gap-4 p-4">
       {messages.map((message, index) => (
@@ -85,7 +86,7 @@ export function ChatList({ messages, userAvatar, opponentAvatar, isGenerating, c
             role: currentSpeaker,
             name: currentSpeaker === 'user' ? '我的Agent' : '对手',
             content: '',
-            timestamp: Date.now(),
+            timestamp: messages[messages.length - 1]?.timestamp ?? 0,
           }}
           isUser={currentSpeaker === 'user'}
           avatar={currentSpeaker === 'user' ? userAvatar : opponentAvatar}

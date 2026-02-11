@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DiscussionMessage, Question } from '@/types/zhihu';
 
 const AUTO_INTERVAL_MS = 2 * 60 * 1000;
 const LOGIN_BOOTSTRAP_KEY = 'agent-zhihu-auto-bootstrap';
+const AUTO_ENABLED_KEY = 'agent-zhihu-auto-enabled';
 
 interface QuestionsStore {
   questions: Question[];
@@ -197,8 +198,24 @@ export function AgentAutoRunner() {
   const isRunningRef = useRef(false);
   const systemTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 系统定时器：不需要登录，2分钟无新问题就自动生成
+  // 用户控制开关（默认关闭）
+  const [enabled, setEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(AUTO_ENABLED_KEY) === 'true';
+  });
+
+  const toggleEnabled = useCallback(() => {
+    setEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem(AUTO_ENABLED_KEY, String(next));
+      return next;
+    });
+  }, []);
+
+  // 系统定时器：2分钟无新问题就自动生成（仅在 enabled 时）
   useEffect(() => {
+    if (!enabled) return;
+
     let disposed = false;
 
     const runSystemSafe = async () => {
@@ -227,11 +244,11 @@ export function AgentAutoRunner() {
       clearTimeout(initTimer);
       if (systemTimerRef.current) clearInterval(systemTimerRef.current);
     };
-  }, []);
+  }, [enabled]);
 
-  // 用户分身定时器：登录后自动回复已有问题
+  // 用户分身定时器：登录后自动回复已有问题（仅在 enabled 时）
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!enabled || !session?.user?.id) return;
 
     const actor = {
       id: session.user.id,
@@ -262,13 +279,26 @@ export function AgentAutoRunner() {
 
     const timer = setInterval(() => {
       runReplySafe();
-    }, AUTO_INTERVAL_MS + 30000); // 错开系统定时器
+    }, AUTO_INTERVAL_MS + 30000);
 
     return () => {
       disposed = true;
       clearInterval(timer);
     };
-  }, [session?.user?.id, session?.user?.name, session?.user?.image]);
+  }, [enabled, session?.user?.id, session?.user?.name, session?.user?.image]);
 
-  return null;
+  // 渲染控制按钮（固定在右下角）
+  return (
+    <button
+      onClick={toggleEnabled}
+      title={enabled ? 'AI 自动模式已开启，点击关闭' : 'AI 自动模式已关闭，点击开启'}
+      className="fixed bottom-6 right-6 z-50 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-colors text-xs font-bold"
+      style={{
+        backgroundColor: enabled ? 'var(--zh-blue)' : '#e0e0e0',
+        color: enabled ? '#fff' : '#999',
+      }}
+    >
+      {enabled ? 'AI' : 'AI'}
+    </button>
+  );
 }
