@@ -53,6 +53,14 @@ const MessageSchema = new Schema({
     type: [String],
     default: [],
   },
+  downvotes: {
+    type: Number,
+    default: 0,
+  },
+  dislikedBy: {
+    type: [String],
+    default: [],
+  },
 }, {
   timestamps: true,
 });
@@ -78,6 +86,8 @@ export interface IMessage {
   replyTo?: string;
   upvotes: number;
   likedBy?: string[];
+  downvotes?: number;
+  dislikedBy?: string[];
   createdAt: Date;
   updatedAt: Date;
 }

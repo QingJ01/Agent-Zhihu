@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback, use } from 'react';
+import { useState, useEffect, useCallback, useRef, use } from 'react';
 import { useSession } from 'next-auth/react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Question, DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { AnswerCard } from '@/components/AnswerCard';
 import { CommentInput } from '@/components/CommentInput';
 import { Icons } from '@/components/Icons';
 import { CreatorCenter } from '@/components/CreatorCenter';
 import { HotList } from '@/components/HotList';
+import { AppHeader } from '@/components/AppHeader';
+import { AI_EXPERTS } from '@/lib/experts';
+import { HashtagText } from '@/components/HashtagText';
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -16,6 +19,7 @@ interface PageProps {
 
 export default function QuestionPage({ params }: PageProps) {
     const { id } = use(params);
+    const router = useRouter();
     const { data: session } = useSession();
     const [question, setQuestion] = useState<Question | null>(null);
     const [messages, setMessages] = useState<DiscussionMessage[]>([]);
@@ -24,6 +28,12 @@ export default function QuestionPage({ params }: PageProps) {
     const [isTyping, setIsTyping] = useState(false);
     const [typingExpert, setTypingExpert] = useState<AIExpert | null>(null);
     const [commentError, setCommentError] = useState<string | null>(null);
+    const [inviteAgentId, setInviteAgentId] = useState<string>(AI_EXPERTS[0]?.id || '');
+    const [showInviteSelector, setShowInviteSelector] = useState(false);
+    const [messageFavorites, setMessageFavorites] = useState<Record<string, boolean>>({});
+    const [questionFavorited, setQuestionFavorited] = useState(false);
+    const [replyTarget, setReplyTarget] = useState<DiscussionMessage | null>(null);
+    const commentSectionRef = useRef<HTMLDivElement | null>(null);
 
     // 加载问题和消息（优先从服务器加载）
     useEffect(() => {
@@ -84,7 +94,7 @@ export default function QuestionPage({ params }: PageProps) {
     }, [id]);
 
     // 提交评论
-    const handleComment = useCallback(async (content: string) => {
+    const handleComment = useCallback(async (content: string, replyToId?: string) => {
         if (!question || !session?.user) return;
         setCommentError(null);
         setIsTyping(true);
@@ -102,7 +112,10 @@ export default function QuestionPage({ params }: PageProps) {
             content,
             upvotes: 0,
             likedBy: [],
+            downvotes: 0,
+            dislikedBy: [],
             createdAt: Date.now(),
+            replyTo: replyToId,
         };
 
         const messagesWithUser = [...messages, localUserMessage];
@@ -121,6 +134,7 @@ export default function QuestionPage({ params }: PageProps) {
                     userAvatar: session.user.image,
                     userMessageId: localUserMessage.id,
                     userMessageCreatedAt: localUserMessage.createdAt,
+                    replyToId,
                 }),
             });
 
@@ -153,7 +167,13 @@ export default function QuestionPage({ params }: PageProps) {
                                     setMessages([...newMessages]);
                                 }
                             } else if (parsed.id && parsed.content) {
-                                newMessages.push(parsed as DiscussionMessage);
+                                const incoming = parsed as DiscussionMessage;
+                                const existingIndex = newMessages.findIndex((m) => m.id === incoming.id);
+                                if (existingIndex >= 0) {
+                                    newMessages[existingIndex] = incoming;
+                                } else {
+                                    newMessages.push(incoming);
+                                }
                                 setMessages([...newMessages]);
                                 setTypingExpert(null);
                             } else if (parsed.status) {
@@ -173,32 +193,243 @@ export default function QuestionPage({ params }: PageProps) {
         }
     }, [question, messages, session]);
 
-    // 处理点赞（含取消赞）
-    const handleLike = useCallback((messageId: string) => {
-        const visitorId = session?.user?.id || (() => {
-            if (typeof window === 'undefined') return '';
-            let vid = localStorage.getItem('agent-zhihu-visitor-id');
-            if (!vid) { vid = `visitor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; localStorage.setItem('agent-zhihu-visitor-id', vid); }
-            return vid;
-        })();
+    useEffect(() => {
+        const userId = session?.user?.id;
+        if (!userId || !question) {
+            setQuestionFavorited(false);
+            return;
+        }
 
-        setMessages((prev) => prev.map((m) => {
-            if (m.id !== messageId) return m;
-            const alreadyLiked = m.likedBy?.includes(visitorId);
-            if (alreadyLiked) {
-                return { ...m, upvotes: Math.max(0, (m.upvotes || 0) - 1), likedBy: (m.likedBy || []).filter(id => id !== visitorId) };
-            } else {
-                return { ...m, upvotes: (m.upvotes || 0) + 1, likedBy: [...(m.likedBy || []), visitorId] };
+        const controller = new AbortController();
+        const loadQuestionFavorite = async () => {
+            try {
+                const response = await fetch(`/api/favorites?targetType=question&targetIds=${encodeURIComponent(question.id)}`, {
+                    signal: controller.signal,
+                });
+                if (!response.ok) return;
+                const data = await response.json();
+                setQuestionFavorited(!!data.statuses?.[question.id]);
+            } catch (error) {
+                if ((error as { name?: string }).name !== 'AbortError') {
+                    console.error('Failed to load question favorite status:', error);
+                }
             }
-        }));
+        };
 
-        // 异步 API 落库
-        fetch('/api/likes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targetId: messageId, targetType: 'message', visitorId }),
-        }).catch(err => console.error('Like API error:', err));
-    }, [session]);
+        loadQuestionFavorite();
+        return () => controller.abort();
+    }, [question, session?.user?.id]);
+
+    useEffect(() => {
+        const userId = session?.user?.id;
+        const messageIds = messages.map((m) => m.id);
+        if (!userId || messageIds.length === 0) {
+            setMessageFavorites({});
+            return;
+        }
+
+        const controller = new AbortController();
+        const loadMessageFavorites = async () => {
+            try {
+                const response = await fetch(`/api/favorites?targetType=message&targetIds=${encodeURIComponent(messageIds.join(','))}`, {
+                    signal: controller.signal,
+                });
+                if (!response.ok) return;
+                const data = await response.json();
+                setMessageFavorites(data.statuses || {});
+            } catch (error) {
+                if ((error as { name?: string }).name !== 'AbortError') {
+                    console.error('Failed to load message favorite statuses:', error);
+                }
+            }
+        };
+
+        loadMessageFavorites();
+        return () => controller.abort();
+    }, [messages, session?.user?.id]);
+
+    const handleQuestionVote = useCallback(async (voteType: 'up' | 'down') => {
+        if (!question) return;
+        if (!session?.user?.id) {
+            window.alert(voteType === 'up' ? '请先登录后再点赞' : '请先登录后再反对');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/likes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetId: question.id, targetType: 'question', voteType }),
+            });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                throw new Error(data?.error || (voteType === 'up' ? '点赞失败' : '反对失败'));
+            }
+
+            const result = await response.json();
+            setQuestion((prev) => {
+                if (!prev) return prev;
+                const likedBy = result.liked
+                    ? Array.from(new Set([...(prev.likedBy || []), session.user.id]))
+                    : (prev.likedBy || []).filter((id) => id !== session.user.id);
+                const dislikedBy = result.downvoted
+                    ? Array.from(new Set([...(prev.dislikedBy || []), session.user.id]))
+                    : (prev.dislikedBy || []).filter((id) => id !== session.user.id);
+                return {
+                    ...prev,
+                    upvotes: Number(result.upvotes) || 0,
+                    downvotes: Number(result.downvotes) || 0,
+                    likedBy,
+                    dislikedBy,
+                };
+            });
+        } catch (error) {
+            console.error('Question vote failed:', error);
+            window.alert(voteType === 'up' ? '点赞失败，请稍后再试' : '反对失败，请稍后再试');
+        }
+    }, [question, session?.user?.id]);
+
+    const handleQuestionFavorite = useCallback(async () => {
+        if (!question) return;
+        if (!session?.user?.id) {
+            window.alert('请先登录后再收藏');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/favorites', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetId: question.id, targetType: 'question' }),
+            });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                throw new Error(data?.error || '收藏失败');
+            }
+
+            const result = await response.json();
+            setQuestionFavorited(!!result.favorited);
+        } catch (error) {
+            console.error('Question favorite failed:', error);
+            window.alert('收藏失败，请稍后再试');
+        }
+    }, [question, session?.user?.id]);
+
+    const handleMessageVoteChange = useCallback((messageId: string, payload: { liked: boolean; downvoted: boolean; upvotes: number; downvotes: number }) => {
+        setMessages((prev) => prev.map((msg) => {
+            if (msg.id !== messageId) return msg;
+            const likedBy = payload.liked
+                ? Array.from(new Set([...(msg.likedBy || []), session?.user?.id || ''])).filter(Boolean)
+                : (msg.likedBy || []).filter((id) => id !== session?.user?.id);
+            const dislikedBy = payload.downvoted
+                ? Array.from(new Set([...(msg.dislikedBy || []), session?.user?.id || ''])).filter(Boolean)
+                : (msg.dislikedBy || []).filter((id) => id !== session?.user?.id);
+            return {
+                ...msg,
+                upvotes: payload.upvotes,
+                downvotes: payload.downvotes,
+                likedBy,
+                dislikedBy,
+            };
+        }));
+    }, [session?.user?.id]);
+
+    const handleMessageFavoriteChange = useCallback((messageId: string, favorited: boolean) => {
+        setMessageFavorites((prev) => ({
+            ...prev,
+            [messageId]: favorited,
+        }));
+    }, []);
+
+    const scrollToComment = useCallback(() => {
+        commentSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, []);
+
+    const handleReplyMessage = useCallback((message: DiscussionMessage) => {
+        setReplyTarget(message);
+        scrollToComment();
+    }, [scrollToComment]);
+
+    const handleShare = useCallback(async () => {
+        const url = `${window.location.origin}/question/${id}`;
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: question?.title || '问题详情', url });
+                return;
+            }
+            await navigator.clipboard.writeText(url);
+            window.alert('链接已复制');
+        } catch (error) {
+            console.error('Share failed:', error);
+        }
+    }, [id, question?.title]);
+
+    const handleInviteAgent = useCallback(async () => {
+        if (!question || !inviteAgentId || isTyping) return;
+        setCommentError(null);
+        setIsTyping(true);
+
+        try {
+            const response = await fetch('/api/questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question,
+                    messages,
+                    invitedAgentId: inviteAgentId,
+                }),
+            });
+
+            const reader = response.body?.getReader();
+            if (!reader) return;
+
+            const decoder = new TextDecoder();
+            let buffer = '';
+            const newMessages: DiscussionMessage[] = [...messages];
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const parsed = JSON.parse(line.slice(6));
+                        if (parsed.expert) {
+                            setTypingExpert(parsed.expert);
+                        } else if (parsed.id && parsed.content) {
+                            const incoming = parsed as DiscussionMessage;
+                            const existingIndex = newMessages.findIndex((m) => m.id === incoming.id);
+                            if (existingIndex >= 0) {
+                                newMessages[existingIndex] = incoming;
+                            } else {
+                                newMessages.push(incoming);
+                            }
+                            setMessages([...newMessages]);
+                            setTypingExpert(null);
+                        } else if (parsed.status) {
+                            const updatedQuestion = { ...question, status: parsed.status, discussionRounds: parsed.discussionRounds };
+                            setQuestion(updatedQuestion);
+                        }
+                    } catch {
+                        // ignore parse errors
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Invite agent error:', error);
+            setCommentError('邀请失败，请稍后重试。');
+        } finally {
+            setIsTyping(false);
+            setTypingExpert(null);
+        }
+    }, [inviteAgentId, isTyping, messages, question]);
 
     if (isLoading) {
         return (
@@ -212,62 +443,43 @@ export default function QuestionPage({ params }: PageProps) {
 
     return (
         <div className="min-h-screen bg-[var(--zh-bg)] font-sans">
-            {/* Header (Copied from page.tsx for consistency) */}
-            <header className="fixed top-0 left-0 right-0 bg-white shadow-sm z-50 h-[52px]">
-                <div className="max-w-[1000px] mx-auto px-4 h-full flex items-center justify-between">
-                    <div className="flex items-center gap-8">
-                        <Link href="/" className="text-[30px] font-black text-[var(--zh-blue)] leading-none select-none">
-                            知乎
-                        </Link>
-                        <nav className="hidden md:flex items-center gap-6 text-[15px]">
-                            <Link href="/" className="font-medium text-[var(--zh-text-main)] hover:text-[var(--zh-blue)]">首页</Link>
-                            <Link href="/" className="font-medium text-[var(--zh-text-main)] hover:text-[var(--zh-blue)]">会员</Link>
-                            <Link href="/" className="font-medium text-[var(--zh-text-main)] hover:text-[var(--zh-blue)]">发现</Link>
-                            <Link href="/" className="font-medium text-[var(--zh-text-main)] hover:text-[var(--zh-blue)]">等你来答</Link>
-                        </nav>
-                    </div>
-                    <div className="flex items-center gap-4 flex-1 justify-end max-w-xl ml-4">
-                        <div className="relative hidden sm:block flex-1 max-w-sm">
-                            <input className="w-full bg-[var(--zh-bg)] border border-transparent focus:bg-white focus:border-[var(--zh-text-gray)] rounded-full px-4 py-1.5 text-sm transition-all outline-none text-[var(--zh-text-main)]" placeholder="搜索你感兴趣的内容..." />
-                            <span className="absolute right-3 top-1.5 text-[var(--zh-text-gray)] cursor-pointer"><Icons.Search size={18} /></span>
-                        </div>
-                        <button className="px-5 py-[6px] bg-[var(--zh-blue)] text-white rounded-full text-sm font-medium hover:bg-[var(--zh-blue-hover)]">提问</button>
-                        <div className="flex items-center gap-6 text-[#999]">
-                            <div className="cursor-pointer hover:text-[#8590A6]"><Icons.Bell className="w-6 h-6" /></div>
-                            <div className="cursor-pointer hover:text-[#8590A6]"><Icons.Message className="w-6 h-6" /></div>
-                            {session?.user ? (
-                                <Link href="/profile"><img src={session.user.image!} alt="" className="w-[30px] h-[30px] rounded-[2px]" /></Link>
-                            ) : (
-                                <div className="w-[30px] h-[30px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400"><Icons.User size={20} /></div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </header>
+            <AppHeader />
 
-            <main className="max-w-[1000px] mx-auto px-0 md:px-4 py-4 mt-[52px]">
+            <main className="max-w-[1000px] mx-auto px-3 md:px-4 py-4 mt-[104px] md:mt-[52px]">
                 <div className="grid grid-cols-1 lg:grid-cols-[694px_296px] gap-[10px]">
                     {/* Left Column */}
                     <div className="min-w-0">
                         {/* Question Header Card */}
-                        <div className="bg-white p-6 shadow-sm rounded-[2px] mb-[10px] border border-[var(--zh-border)]">
+                        <div className="bg-white p-4 md:p-6 shadow-sm rounded-[2px] mb-[10px] border border-[var(--zh-border)]">
                             <div className="flex flex-wrap gap-2 mb-4">
                                 {question.tags?.map(tag => (
                                     <span key={tag} className="px-3 py-1 bg-[#EBF5FF] text-[var(--zh-blue)] text-sm rounded-full font-medium">{tag}</span>
                                 ))}
                             </div>
-                            <h1 className="text-[22px] font-bold text-[#121212] leading-normal mb-4">{question.title}</h1>
-                            {question.description && <div className="text-[15px] text-[#121212] leading-7 mb-4">{question.description}</div>}
+                            <h1 className="text-[20px] md:text-[22px] font-bold text-[#121212] leading-normal mb-4">{question.title}</h1>
+                            {question.description && (
+                                <div className="text-[15px] text-[#121212] leading-7 mb-4">
+                                    <HashtagText text={question.description} onTagClick={(tag) => router.push(`/?tag=${encodeURIComponent(tag)}`)} />
+                                </div>
+                            )}
 
-                            <div className="flex items-center gap-4">
-                                <button className="px-4 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] font-semibold text-[14px] hover:bg-blue-600 transition-colors">写回答</button>
-                                <button className="px-4 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] rounded-[3px] font-semibold text-[14px] hover:bg-[#EBF5FF] transition-colors">邀请回答</button>
-                                <button className="px-4 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] rounded-[3px] font-semibold text-[14px] hover:bg-[#EBF5FF] transition-colors flex items-center gap-1">
-                                    <Icons.Upvote size={12} filled={false} /> 注意
-                                </button>
-                                <div className="flex items-center gap-6 ml-4 text-[var(--zh-text-gray)] text-sm">
-                                    <button className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Comment size={16} /> {messages.length} 条评论</button>
-                                    <button className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Share size={16} /> 分享</button>
+                            <div className="flex flex-col items-start gap-3">
+                                <div className="flex flex-wrap items-center gap-2 w-full">
+                                    <button onClick={scrollToComment} className="px-4 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] font-semibold text-[14px] hover:bg-blue-600 transition-colors">写回答</button>
+                                    <button
+                                        onClick={() => setShowInviteSelector(true)}
+                                        disabled={isTyping}
+                                        className="px-4 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] rounded-[3px] font-semibold text-[14px] hover:bg-[#EBF5FF] transition-colors disabled:opacity-50"
+                                    >
+                                        邀请回答
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[var(--zh-text-gray)] text-xs md:text-sm">
+                                    <button onClick={() => handleQuestionVote('up')} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Upvote size={16} filled={!!session?.user?.id && (question.likedBy || []).includes(session.user.id)} /> {question.upvotes || 0}</button>
+                                    <button onClick={() => handleQuestionVote('down')} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Downvote size={16} filled={!!session?.user?.id && (question.dislikedBy || []).includes(session.user.id)} /> {question.downvotes || 0}</button>
+                                    <button onClick={scrollToComment} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Comment size={16} /> {messages.length} 条评论</button>
+                                    <button onClick={handleShare} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Share size={16} /> 分享</button>
+                                    <button onClick={handleQuestionFavorite} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Favorite size={16} filled={questionFavorited} /> {questionFavorited ? '已收藏' : '收藏'}</button>
                                     <button className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.More size={16} /></button>
                                 </div>
                             </div>
@@ -275,7 +487,7 @@ export default function QuestionPage({ params }: PageProps) {
 
                         {/* Answer List */}
                         <div className="bg-white shadow-sm rounded-[2px] border border-[var(--zh-border)]">
-                            <div className="h-[50px] flex items-center justify-between px-5 border-b border-[var(--zh-border)]">
+                            <div className="h-[50px] flex items-center justify-between px-3 md:px-5 border-b border-[var(--zh-border)]">
                                 <div className="font-semibold text-[15px]">{messages.length} 个回答</div>
                                 <div className="flex items-center gap-1 text-sm text-[var(--zh-text-gray)] cursor-pointer">默认排序 <Icons.CaretDown size={12} /></div>
                             </div>
@@ -285,7 +497,11 @@ export default function QuestionPage({ params }: PageProps) {
                                     key={message.id}
                                     message={message}
                                     allMessages={messages}
-                                    onLike={handleLike}
+                                    onReply={handleReplyMessage}
+                                    currentUserId={session?.user?.id}
+                                    isFavorited={!!messageFavorites[message.id]}
+                                    onVoteChange={handleMessageVoteChange}
+                                    onFavoriteChange={handleMessageFavoriteChange}
                                 />
                             ))}
 
@@ -298,6 +514,7 @@ export default function QuestionPage({ params }: PageProps) {
                                         authorType: 'ai',
                                         content: '',
                                         upvotes: 0,
+                                        downvotes: 0,
                                         createdAt: Date.now(),
                                     }}
                                     isTyping
@@ -305,13 +522,24 @@ export default function QuestionPage({ params }: PageProps) {
                             )}
 
                             {/* Comment Input Area */}
-                            <div className="p-5 bg-gray-50 border-t border-[var(--zh-border)]">
+                            <div ref={commentSectionRef} className="p-3 md:p-5 bg-gray-50 border-t border-[var(--zh-border)]">
                                 <div className="flex items-start gap-3">
                                     <div className="flex-1">
                                         <CommentInput
                                             onSubmit={handleComment}
                                             disabled={isTyping}
-                                            placeholder={question.status === 'waiting' ? '发表你的观点，激活 AI 讨论...' : '写下你的回答...'}
+                                            submitLabel={replyTarget ? '发布回复' : '发布回答'}
+                                            placeholder={
+                                                replyTarget
+                                                    ? `回复 @${replyTarget.authorType === 'ai' ? (replyTarget.author as AIExpert).name : replyTarget.author.name}`
+                                                    : (question.status === 'waiting' ? '发表你的观点，激活 AI 讨论...' : '写下你的回答...')
+                                            }
+                                            replyTarget={replyTarget ? {
+                                                id: replyTarget.id,
+                                                name: replyTarget.authorType === 'ai' ? (replyTarget.author as AIExpert).name : replyTarget.author.name,
+                                                preview: replyTarget.content.length > 30 ? `${replyTarget.content.slice(0, 30)}...` : replyTarget.content,
+                                            } : null}
+                                            onCancelReply={() => setReplyTarget(null)}
                                         />
                                         {commentError && (
                                             <div className="mt-2 text-sm text-red-500">{commentError}</div>
@@ -324,18 +552,69 @@ export default function QuestionPage({ params }: PageProps) {
 
                     {/* Right Column (Sidebar) */}
                     <div className="min-w-0 hidden lg:block">
-                        <CreatorCenter />
+                        <CreatorCenter questions={hotQuestions} />
                         <HotList questions={hotQuestions} />
-                        <div className="bg-white p-4 shadow-sm rounded-[2px] border border-[var(--zh-border)] mt-[10px]">
-                            <h3 className="font-semibold text-sm mb-3 text-[var(--zh-text-main)]">相关问题</h3>
-                            <div className="space-y-3">
-                                {[1, 2, 3, 4].map(i => (
-                                    <div key={i} className="text-[14px] text-[var(--zh-blue)] hover:underline cursor-pointer">如何评价 Agent-Zhihu 的技术架构？</div>
-                                ))}
+                        <div className="mt-[10px] px-1 text-[14px] text-[var(--zh-text-gray)]">© 2026 Agent 知乎</div>
+                    </div>
+                </div>
+
+                {showInviteSelector && (
+                    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 px-0 md:px-4" onClick={() => setShowInviteSelector(false)}>
+                        <div className="w-full max-w-[560px] rounded-t-xl md:rounded-lg bg-white p-4 md:p-5 shadow-xl max-h-[80vh] md:max-h-none overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            <div className="mb-4 flex items-center justify-between">
+                                <h3 className="text-[18px] font-semibold text-[#121212]">选择邀请回答的专家</h3>
+                                <button
+                                    onClick={() => setShowInviteSelector(false)}
+                                    className="text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)]"
+                                >
+                                    关闭
+                                </button>
+                            </div>
+
+                            <div className="max-h-[360px] space-y-2 overflow-y-auto">
+                                {AI_EXPERTS.map((agent) => {
+                                    const active = inviteAgentId === agent.id;
+                                    return (
+                                        <button
+                                            key={agent.id}
+                                            onClick={() => setInviteAgentId(agent.id)}
+                                            className={`w-full rounded-md border p-3 text-left transition-colors ${
+                                                active ? 'border-[var(--zh-blue)] bg-[#EBF5FF]' : 'border-[var(--zh-border)] hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <div className="text-[15px] font-semibold text-[#121212]">{agent.name}</div>
+                                                    <div className="mt-0.5 text-[13px] text-[#646464]">{agent.title}</div>
+                                                </div>
+                                                {active && <span className="text-xs font-semibold text-[var(--zh-blue)]">已选择</span>}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="mt-5 flex flex-col-reverse sm:flex-row justify-end gap-2">
+                                <button
+                                    onClick={() => setShowInviteSelector(false)}
+                                    className="rounded-[3px] border border-[var(--zh-border)] px-4 py-2 text-sm text-[var(--zh-text-main)] hover:bg-gray-50 w-full sm:w-auto"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowInviteSelector(false);
+                                        void handleInviteAgent();
+                                    }}
+                                    disabled={isTyping}
+                                    className="rounded-[3px] bg-[var(--zh-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50 w-full sm:w-auto"
+                                >
+                                    邀请 TA 回答
+                                </button>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
             </main>
         </div>
     );

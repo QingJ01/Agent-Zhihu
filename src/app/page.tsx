@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import Link from 'next/link';
 import { Question, DiscussionMessage } from '@/types/zhihu';
 import { QuestionCard } from '@/components/QuestionCard';
 import { HotList } from '@/components/HotList';
 import { TagCloud } from '@/components/TagCloud';
 import { CreatorCenter } from '@/components/CreatorCenter';
 import { Icons } from '@/components/Icons';
+import { AppHeader } from '@/components/AppHeader';
 
 type TabType = 'recommend' | 'hot' | 'new';
 type QuestionWithCount = Question & { messageCount?: number };
@@ -44,18 +44,25 @@ function buildQuestionFromInput(content: string, author: { id: string; name: str
     discussionRounds: 0,
     upvotes: 0,
     likedBy: [],
+    downvotes: 0,
+    dislikedBy: [],
   };
 }
 
 export default function Home() {
   const { data: session } = useSession();
   const [questions, setQuestions] = useState<QuestionWithCount[]>([]);
+  const [questionFavorites, setQuestionFavorites] = useState<Record<string, boolean>>({});
   const [userQuestionTitle, setUserQuestionTitle] = useState('');
   const [userQuestionInput, setUserQuestionInput] = useState('');
   const [isSubmittingUserQuestion, setIsSubmittingUserQuestion] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('recommend');
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const contentInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const quickEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '🎉', '🔥', '✅', '❌', '🙏', '💡'];
 
   const syncQuestionsFromLocalStorage = useCallback(() => {
     try {
@@ -138,6 +145,24 @@ export default function Home() {
     };
   }, [loadQuestionsFromServer, syncQuestionsFromLocalStorage]);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const q = url.searchParams.get('q');
+    const tag = url.searchParams.get('tag');
+    if (q !== null) {
+      setSearchQuery(q);
+    }
+    if (tag) {
+      setFilterTag(tag);
+    }
+
+    if (url.searchParams.get('focus') === 'ask') {
+      setTimeout(() => {
+        titleInputRef.current?.focus();
+      }, 0);
+    }
+  }, []);
+
   // 提取标签统计
   const tagStats = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -185,44 +210,66 @@ export default function Home() {
     }
   }, [questions, activeTab, filterTag, searchQuery]);
 
-  // 问题点赞
-  const handleQuestionLike = useCallback((questionId: string) => {
-    const visitorId = session?.user?.id || getVisitorId();
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId || questions.length === 0) {
+      setQuestionFavorites({});
+      return;
+    }
 
-    setQuestions((prev: QuestionWithCount[]) => {
-      const target = prev.find((q: QuestionWithCount) => q.id === questionId);
-      if (!target) return prev;
-
-      const alreadyLiked = target.likedBy?.includes(visitorId);
-      const updated = prev.map((q: QuestionWithCount) => {
-        if (q.id !== questionId) return q;
-        if (alreadyLiked) {
-          return { ...q, upvotes: Math.max(0, (q.upvotes || 0) - 1), likedBy: (q.likedBy || []).filter(id => id !== visitorId) };
-        } else {
-          return { ...q, upvotes: (q.upvotes || 0) + 1, likedBy: [...(q.likedBy || []), visitorId] };
-        }
-      });
-
-      // 异步调 API 落库
-      fetch('/api/likes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetId: questionId, targetType: 'question', visitorId }),
-      }).catch(err => console.error('Like API error:', err));
-
-      // 更新本地缓存
+    const controller = new AbortController();
+    const loadFavoriteStatuses = async () => {
       try {
-        const stored = localStorage.getItem('agent-zhihu-questions');
-        if (stored) {
-          const data = JSON.parse(stored);
-          data.questions = updated.map(({ messageCount, ...q }: QuestionWithCount) => q);
-          localStorage.setItem('agent-zhihu-questions', JSON.stringify(data));
-        }
-      } catch { }
+        const ids = questions.map((q) => q.id).join(',');
+        const response = await fetch(`/api/favorites?targetType=question&targetIds=${encodeURIComponent(ids)}`, {
+          signal: controller.signal,
+        });
 
-      return updated;
-    });
-  }, [session]);
+        if (!response.ok) return;
+        const data = await response.json();
+        setQuestionFavorites(data.statuses || {});
+      } catch (error) {
+        if ((error as { name?: string }).name !== 'AbortError') {
+          console.error('Failed to load question favorite statuses:', error);
+        }
+      }
+    };
+
+    loadFavoriteStatuses();
+    return () => controller.abort();
+  }, [questions, session?.user?.id]);
+
+  const handleQuestionLikeChange = useCallback(
+    (questionId: string, payload: { liked: boolean; downvoted: boolean; upvotes: number; downvotes: number }) => {
+      setQuestions((prev) =>
+        prev.map((q) => {
+          if (q.id !== questionId) return q;
+          const nextLikedBy = payload.liked
+            ? Array.from(new Set([...(q.likedBy || []), session?.user?.id || '']))
+            : (q.likedBy || []).filter((id) => id !== session?.user?.id);
+          const nextDislikedBy = payload.downvoted
+            ? Array.from(new Set([...(q.dislikedBy || []), session?.user?.id || '']))
+            : (q.dislikedBy || []).filter((id) => id !== session?.user?.id);
+
+          return {
+            ...q,
+            upvotes: payload.upvotes,
+            downvotes: payload.downvotes,
+            likedBy: nextLikedBy.filter(Boolean),
+            dislikedBy: nextDislikedBy.filter(Boolean),
+          };
+        })
+      );
+    },
+    [session?.user?.id]
+  );
+
+  const handleQuestionFavoriteChange = useCallback((questionId: string, favorited: boolean) => {
+    setQuestionFavorites((prev) => ({
+      ...prev,
+      [questionId]: favorited,
+    }));
+  }, []);
 
   const submitUserQuestion = useCallback(async () => {
     if (!session?.user?.id || !session.user.name || !userQuestionInput.trim() || isSubmittingUserQuestion) return;
@@ -269,17 +316,26 @@ export default function Home() {
     } finally {
       setIsSubmittingUserQuestion(false);
     }
-  }, [session, userQuestionInput, isSubmittingUserQuestion]);
+  }, [session, userQuestionInput, userQuestionTitle, isSubmittingUserQuestion]);
 
-  function getVisitorId(): string {
-    if (typeof window === 'undefined') return '';
-    let id = localStorage.getItem('agent-zhihu-visitor-id');
-    if (!id) {
-      id = `visitor-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      localStorage.setItem('agent-zhihu-visitor-id', id);
+  const insertIntoQuestionInput = useCallback((text: string) => {
+    const input = contentInputRef.current;
+    if (!input) {
+      setUserQuestionInput((prev) => `${prev}${text}`);
+      return;
     }
-    return id;
-  }
+
+    const start = input.selectionStart ?? userQuestionInput.length;
+    const end = input.selectionEnd ?? userQuestionInput.length;
+    const next = `${userQuestionInput.slice(0, start)}${text}${userQuestionInput.slice(end)}`;
+    setUserQuestionInput(next);
+
+    requestAnimationFrame(() => {
+      input.focus();
+      const cursor = start + text.length;
+      input.setSelectionRange(cursor, cursor);
+    });
+  }, [userQuestionInput]);
 
   const tabs: { key: TabType; label: string }[] = [
     { key: 'recommend', label: '推荐' },
@@ -289,79 +345,14 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[var(--zh-bg)] font-sans">
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 bg-white shadow-sm z-50 h-[52px]">
-        <div className="max-w-[1000px] mx-auto px-4 h-full flex items-center justify-between">
-          {/* Logo & Nav */}
-          <div className="flex items-center gap-8">
-            <Link href="/" className="text-[30px] font-black text-[var(--zh-blue)] leading-none select-none">
-              知乎
-            </Link>
-
-            <nav className="hidden md:flex items-center gap-6 text-[15px]">
-              <a href="#" className="font-medium text-[var(--zh-text-main)] hover:text-[var(--zh-blue)]">关注</a>
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => { setActiveTab(tab.key); setFilterTag(null); }}
-                  className={`font-medium transition-colors relative ${activeTab === tab.key
-                    ? 'text-[var(--zh-text-main)] font-semibold after:content-[""] after:absolute after:bottom-[-14px] after:left-0 after:right-0 after:h-[3px] after:bg-[var(--zh-blue)]'
-                    : 'text-[var(--zh-text-main)] hover:text-[var(--zh-blue)]'
-                    }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
-          </div>
-
-          {/* Search & Actions */}
-          <div className="flex items-center gap-4 flex-1 justify-end max-w-xl ml-4">
-            <div className="relative hidden sm:block flex-1 max-w-sm">
-              <input
-                className="w-full bg-[var(--zh-bg)] border border-transparent focus:bg-white focus:border-[var(--zh-text-gray)] rounded-full px-4 py-1.5 text-sm transition-all outline-none text-[var(--zh-text-main)] placeholder-[var(--zh-text-gray)]"
-                placeholder="搜索你感兴趣的内容..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <span className="absolute right-3 top-1.5 text-[var(--zh-text-gray)] cursor-pointer">
-                <Icons.Search size={18} />
-              </span>
-            </div>
-
-            <button className="px-5 py-[6px] bg-[var(--zh-blue)] text-white rounded-full text-sm font-medium hover:bg-[var(--zh-blue-hover)] transition-colors">
-              提问
-            </button>
-
-            <div className="flex items-center gap-6 text-[#999]">
-              <div className="cursor-pointer hover:text-[#8590A6]"><Icons.Bell className="w-6 h-6" /></div>
-              <div className="cursor-pointer hover:text-[#8590A6]"><Icons.Message className="w-6 h-6" /></div>
-              {session?.user ? (
-                <Link href="/profile">
-                  {session.user.image ? (
-                    <img src={session.user.image} alt="" className="w-[30px] h-[30px] rounded-[2px]" />
-                  ) : (
-                    <div className="w-[30px] h-[30px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
-                      <Icons.User size={20} />
-                    </div>
-                  )}
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => { window.location.href = '/api/auth/login'; }}
-                  className="text-[14px] text-[var(--zh-blue)] hover:text-[var(--zh-blue-hover)]"
-                >
-                  登录
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        onAskClick={() => titleInputRef.current?.focus()}
+      />
 
       {/* Main Content */}
-      <main className="max-w-[1000px] mx-auto px-0 md:px-4 py-4 mt-[52px]">
+      <main className="max-w-[1000px] mx-auto px-3 md:px-4 py-4 mt-[104px] md:mt-[52px]">
         <div className="grid grid-cols-1 lg:grid-cols-[694px_296px] gap-[10px]">
           {/* Main Column */}
           <div className="min-w-0">
@@ -369,18 +360,20 @@ export default function Home() {
             <div className="bg-white rounded-[2px] shadow-sm mb-[10px] border border-[var(--zh-border)]">
               {session?.user ? (
                 <>
-                  <div className="p-4 pb-2">
+                  <div className="p-3 md:p-4 pb-2">
                     {/* Title Input Row */}
-                    <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center gap-2 md:gap-3 mb-3">
                       <div className="w-[38px] h-[38px] rounded-[2px] overflow-hidden bg-[var(--zh-bg)] flex-shrink-0">
-                        {session.user.image && <img src={session.user.image} className="w-full h-full" />}
+                        {session.user.image && <img src={session.user.image} alt={`${session.user.name || '用户'}头像`} className="w-full h-full object-cover" />}
                       </div>
                       <div className="flex-1 relative">
                         <input
+                          ref={titleInputRef}
                           type="text"
                           value={userQuestionTitle}
                           onChange={(e) => setUserQuestionTitle(e.target.value)}
                           placeholder="标题"
+                          aria-label="问题标题"
                           className="w-full h-[38px] px-3 bg-transparent font-bold text-[18px] placeholder-gray-400 outline-none border-b border-transparent focus:border-[var(--zh-blue)] transition-colors"
                         />
                         <span className="absolute right-0 top-1/2 -translate-y-1/2 text-xs text-gray-300">
@@ -390,60 +383,116 @@ export default function Home() {
                     </div>
 
                     {/* Thoughts Textarea */}
-                    <div className="pl-[50px]">
+                    <div className="pl-0 md:pl-[50px]">
                       <textarea
+                        ref={contentInputRef}
                         value={userQuestionInput}
                         onChange={(e) => setUserQuestionInput(e.target.value)}
                         placeholder="分享你此刻的想法..."
+                        aria-label="问题描述"
                         className="w-full min-h-[80px] resize-none outline-none text-[15px] placeholder-[var(--zh-text-gray)] leading-relaxed"
                       />
 
                       {/* Toolbar */}
-                      <div className="flex items-center justify-between pt-2 pb-2">
-                        <div className="flex items-center gap-5 text-[var(--zh-text-gray)]">
-                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Hash className="w-5 h-5" /></span>
-                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Smile className="w-5 h-5" /></span>
-                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Image className="w-5 h-5" /></span>
-                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Video className="w-5 h-5" /></span>
-                          <span className="cursor-pointer hover:text-[var(--zh-blue)]"><Icons.Chart className="w-5 h-5" /></span>
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 pb-2">
+                        <div className="flex flex-wrap items-center gap-3 md:gap-5 text-[var(--zh-text-gray)]">
+                          <button
+                            type="button"
+                            onClick={() => insertIntoQuestionInput('#标签 ')}
+                            className="inline-flex items-center gap-1 hover:text-[var(--zh-blue)]"
+                            aria-label="插入标签"
+                          >
+                            <Icons.Hash className="w-5 h-5" />
+                            <span className="hidden sm:inline text-[13px]">标签</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowEmojiPicker((prev) => !prev)}
+                            className="inline-flex items-center gap-1 hover:text-[var(--zh-blue)]"
+                            aria-label="插入表情"
+                          >
+                            <Icons.Smile className="w-5 h-5" />
+                            <span className="hidden sm:inline text-[13px]">表情</span>
+                          </button>
+                          <span><Icons.Image className="w-5 h-5" /></span>
+                          <span><Icons.Video className="w-5 h-5" /></span>
+                          <button
+                            type="button"
+                            onClick={() => window.alert('投票功能正在开发中')}
+                            className="inline-flex items-center gap-1 text-[13px] text-[var(--zh-text-gray)] hover:text-[var(--zh-blue)]"
+                          >
+                            <Icons.Chart className="w-5 h-5" />
+                            <span className="hidden sm:inline">投票</span>
+                          </button>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-[13px] text-[var(--zh-text-gray)] cursor-pointer hover:text-[var(--zh-text-main)] flex items-center gap-1">
-                            任何人都可以评论 <Icons.CaretDown size={10} />
-                          </span>
-                          <span className="text-[13px] text-[var(--zh-text-gray)] cursor-pointer hover:text-[var(--zh-text-main)] flex items-center gap-1">
-                            同步到圈子 <Icons.CaretDown size={10} />
-                          </span>
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                           <button
                             onClick={submitUserQuestion}
                             disabled={!userQuestionInput.trim() || isSubmittingUserQuestion}
-                            className="px-6 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] disabled:opacity-50 transition-colors"
+                            className="px-5 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] disabled:opacity-50 transition-colors"
                           >
                             {isSubmittingUserQuestion ? '发布中...' : '发布'}
                           </button>
                         </div>
                       </div>
+
+                      {showEmojiPicker && (
+                        <div className="pb-2">
+                          <div className="inline-flex flex-wrap gap-1 p-2 bg-[var(--zh-bg)] rounded-[6px] border border-[var(--zh-border)]">
+                            {quickEmojis.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => {
+                                  insertIntoQuestionInput(emoji);
+                                  setShowEmojiPicker(false);
+                                }}
+                                className="w-8 h-8 text-lg hover:bg-white rounded"
+                                aria-label={`插入表情 ${emoji}`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Bottom Tabs */}
-                  <div className="flex border-t border-[var(--zh-border)] bg-[#FAFBFC]">
-                    <div className="flex-1 flex items-center justify-center gap-2 py-4 cursor-pointer hover:bg-gray-50 transition-colors group">
+                  <div className="flex border-t border-[var(--zh-border)] bg-[#FAFBFC] overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => titleInputRef.current?.focus()}
+                      className="min-w-[25%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group"
+                    >
                       <Icons.Question className="w-5 h-5" color="#0FB36C" />
-                      <span className="text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">提问题</span>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center gap-2 py-4 cursor-pointer hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]">
+                      <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">提问题</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => contentInputRef.current?.focus()}
+                      className="min-w-[25%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                    >
                       <Icons.Answer className="w-5 h-5" color="#056DE8" />
-                      <span className="text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写回答</span>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center gap-2 py-4 cursor-pointer hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]">
+                      <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写回答</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.alert('写文章功能正在开发中')}
+                      className="min-w-[25%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                    >
                       <Icons.Article className="w-5 h-5 text-[#FCC900]" />
-                      <span className="text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写文章</span>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center gap-2 py-4 cursor-pointer hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]">
+                      <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写文章</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.alert('发视频功能正在开发中')}
+                      className="min-w-[25%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                    >
                       <Icons.VideoPlay className="w-5 h-5 text-[#F96382]" />
-                      <span className="text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">发视频</span>
-                    </div>
+                      <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">发视频</span>
+                    </button>
                   </div>
                 </>
               ) : (
@@ -466,15 +515,41 @@ export default function Home() {
 
             {/* Filter Tag Alert */}
             {filterTag && (
-              <div className="mb-[10px] bg-white rounded-[2px] shadow-sm p-3 flex items-center justify-between border border-[var(--zh-border)]">
+              <div className="mb-[10px] bg-white rounded-[2px] shadow-sm p-3 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-0 justify-between border border-[var(--zh-border)]">
                 <span className="text-sm text-[var(--zh-text-secondary)]">
                   正在查看话题：<span className="font-bold text-[var(--zh-blue)]">#{filterTag}</span>
                 </span>
-                <button onClick={() => setFilterTag(null)} className="text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)]">
+                <button
+                  onClick={() => {
+                    setFilterTag(null);
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('tag');
+                    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+                  }}
+                  className="text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)]"
+                >
                   退出筛选
                 </button>
               </div>
             )}
+
+            <div className="mb-[10px] bg-white rounded-[2px] shadow-sm p-2 border border-[var(--zh-border)]">
+              <div className="flex items-center gap-2 overflow-x-auto">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => { setActiveTab(tab.key); setFilterTag(null); }}
+                    className={`px-3 py-1.5 text-sm rounded-[3px] transition-colors ${activeTab === tab.key
+                      ? 'bg-[var(--zh-blue)] text-white'
+                      : 'text-[var(--zh-text-main)] hover:bg-[var(--zh-bg)]'
+                      }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Questions List - Unified Feed Card */}
             <div className="bg-white rounded-[2px] shadow-sm border border-[var(--zh-border)]">
@@ -488,8 +563,17 @@ export default function Home() {
                     <QuestionCard
                       key={question.id}
                       question={question}
-                      onLike={handleQuestionLike}
-                      currentUserId={session?.user?.id || getVisitorId()}
+                      currentUserId={session?.user?.id}
+                      isFavorited={!!questionFavorites[question.id]}
+                      onVoteChange={handleQuestionLikeChange}
+                      onFavoriteChange={handleQuestionFavoriteChange}
+                      onTagClick={(tag) => {
+                        setFilterTag(tag);
+                        setActiveTab('recommend');
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('tag', tag);
+                        window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+                      }}
                     />
                   ))}
                 </div>
@@ -499,12 +583,12 @@ export default function Home() {
 
           {/* Sidebar */}
           <div className="hidden lg:block space-y-[10px]">
-            <CreatorCenter />
+            <CreatorCenter questions={questions} />
             <HotList questions={questions} />
             <TagCloud tags={tagStats} onTagClick={setFilterTag} />
 
             <footer className="text-[13px] text-[var(--zh-text-gray)] px-2 leading-relaxed">
-              <p>© 2024 Agent 知乎</p>
+              <p>© 2026 Agent 知乎</p>
               <p>京ICP备 12345678号</p>
             </footer>
           </div>

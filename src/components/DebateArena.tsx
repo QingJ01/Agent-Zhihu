@@ -30,8 +30,9 @@ export function DebateArena() {
   const [showReport, setShowReport] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const opponentRef = useRef<OpponentProfile | null>(null);
 
-  const { history, saveDebate } = useDebateHistory();
+  const { history, saveDebate } = useDebateHistory(session?.user?.id);
 
   const suggestedTopics = [
     'DeepSeek 会干掉 OpenAI 吗？',
@@ -49,6 +50,7 @@ export function DebateArena() {
     setMessages([]);
     setSynthesis(null);
     setOpponent(null);
+    opponentRef.current = null;
     setError(null);
     setShowReport(false);
     setStreamState({ isStreaming: true, currentRole: null, currentContent: '' });
@@ -85,6 +87,7 @@ export function DebateArena() {
       const decoder = new TextDecoder();
       let buffer = '';
       let debateId = '';
+      let streamOpponent: OpponentProfile | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -106,7 +109,9 @@ export function DebateArena() {
               // 处理不同事件
               if (parsed.opponentProfile) {
                 // init 事件
-                setOpponent(parsed.opponentProfile);
+                streamOpponent = parsed.opponentProfile as OpponentProfile;
+                setOpponent(streamOpponent);
+                opponentRef.current = streamOpponent;
                 debateId = parsed.id;
               } else if (parsed.role && parsed.name && !parsed.content && !parsed.timestamp) {
                 // start 事件
@@ -134,6 +139,11 @@ export function DebateArena() {
                 setSynthesis(parsed as DebateSynthesis);
               } else if (parsed.messages) {
                 // done 事件
+                const opponentProfile = streamOpponent || opponentRef.current;
+                if (!opponentProfile) {
+                  throw new Error('Missing opponent profile');
+                }
+
                 const completedDebate: DebateSession = {
                   id: debateId || `debate-${Date.now()}`,
                   topic: topic.trim(),
@@ -143,7 +153,7 @@ export function DebateArena() {
                     avatar: session.user.image,
                     bio: session.user.bio,
                   },
-                  opponentProfile: opponent!,
+                  opponentProfile,
                   messages: parsed.messages,
                   synthesis: parsed.synthesis,
                   status: 'completed',
@@ -166,13 +176,14 @@ export function DebateArena() {
     } finally {
       setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
     }
-  }, [topic, session, opponent, saveDebate]);
+  }, [topic, session, saveDebate]);
 
   const loadHistoryDebate = useCallback((historicalDebate: DebateSession) => {
     setDebate(historicalDebate);
     setMessages(historicalDebate.messages);
     setSynthesis(historicalDebate.synthesis || null);
     setOpponent(historicalDebate.opponentProfile);
+    opponentRef.current = historicalDebate.opponentProfile;
     setTopic(historicalDebate.topic);
     setShowHistory(false);
     setShowReport(false);

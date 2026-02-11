@@ -5,6 +5,19 @@ import { connectDB } from '@/lib/mongodb';
 import Question from '@/models/Question';
 import Message from '@/models/Message';
 import Debate from '@/models/Debate';
+import Favorite from '@/models/Favorite';
+
+type RecentOpponent = {
+  opponentProfile?: {
+    name?: string;
+    avatar?: string;
+  };
+  topic?: string;
+  synthesis?: {
+    winner?: string;
+  };
+  createdAt: Date | string | number;
+};
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -27,6 +40,7 @@ export async function GET() {
       topTags,
       recentOpponents,
       likesGiven,
+      favorites,
     ] = await Promise.all([
       Question.countDocuments({ 'author.id': userId }),
       Message.countDocuments({ 'author.id': userId, authorType: 'user' }),
@@ -68,6 +82,7 @@ export async function GET() {
         Question.countDocuments({ likedBy: userId }),
         Message.countDocuments({ likedBy: userId }),
       ]),
+      Favorite.countDocuments({ userId }),
     ]);
 
     const totalUpvotes =
@@ -86,10 +101,11 @@ export async function GET() {
       answers: answerCount,
       debates: debateCount,
       upvotesReceived: totalUpvotes,
-      likesGiven: (likesGiven as number[])[0] + (likesGiven as number[])[1],
+      likesGiven: likesGiven[0] + likesGiven[1],
+      favorites,
       debateRecord: record,
       topTags: topTags.map((t: { _id: string; count: number }) => ({ tag: t._id, count: t.count })),
-      recentOpponents: recentOpponents.map((d: any) => ({
+      recentOpponents: (recentOpponents as RecentOpponent[]).map((d) => ({
         name: d.opponentProfile?.name,
         avatar: d.opponentProfile?.avatar,
         topic: d.topic,
