@@ -19,19 +19,7 @@ export function CreatorCenter({ questions = [] }: CreatorCenterProps) {
     };
 
     const handleGoRandomQuestion = () => {
-        let pool = questions;
-
-        if (pool.length === 0) {
-            try {
-                const raw = localStorage.getItem('agent-zhihu-questions');
-                if (raw) {
-                    const parsed = JSON.parse(raw) as { questions?: Question[] };
-                    pool = (parsed.questions || []) as (Question & { messageCount?: number })[];
-                }
-            } catch (error) {
-                console.error('Failed to load questions for random answer:', error);
-            }
-        }
+        const pool = questions;
 
         if (pool.length === 0) {
             router.push('/');

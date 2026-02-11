@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { Question, DiscussionMessage, UserAuthor } from '@/types/zhihu';
+import { connectDB } from '@/lib/mongodb';
+import QuestionModel from '@/models/Question';
+import MessageModel from '@/models/Message';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -13,8 +16,6 @@ type ParticipationAction = 'reply_existing' | 'ask_new';
 
 interface ParticipateRequest {
   actor: UserAuthor;
-  questions: Question[];
-  messages: Record<string, DiscussionMessage[]>;
   trigger?: 'manual' | 'auto';
   forceAction?: ParticipationAction;
 }
@@ -26,6 +27,70 @@ function normalizeTags(tags: unknown): string[] {
     .filter(Boolean)
     .slice(0, 3);
   return normalized.length > 0 ? normalized : ['话题'];
+}
+
+function toQuestion(doc: {
+  id: string;
+  title: string;
+  description?: string;
+  tags?: string[];
+  author?: UserAuthor;
+  createdBy?: 'human' | 'agent' | 'system';
+  createdAt: Date | number;
+  status?: 'discussing' | 'waiting' | 'active';
+  discussionRounds?: number;
+  upvotes?: number;
+  likedBy?: string[];
+  downvotes?: number;
+  dislikedBy?: string[];
+}): Question {
+  const createdAtMs = typeof doc.createdAt === 'number' ? doc.createdAt : new Date(doc.createdAt).getTime();
+  return {
+    id: doc.id,
+    title: doc.title,
+    description: doc.description || '',
+    tags: doc.tags || [],
+    author: doc.author,
+    createdBy: doc.createdBy || 'system',
+    createdAt: createdAtMs,
+    status: doc.status || 'active',
+    discussionRounds: doc.discussionRounds || 0,
+    upvotes: doc.upvotes || 0,
+    likedBy: doc.likedBy || [],
+    downvotes: doc.downvotes || 0,
+    dislikedBy: doc.dislikedBy || [],
+  };
+}
+
+function toMessage(doc: {
+  id: string;
+  questionId: string;
+  author: UserAuthor;
+  authorType: 'ai' | 'user';
+  createdBy?: 'human' | 'agent' | 'system';
+  content: string;
+  replyTo?: string;
+  upvotes?: number;
+  likedBy?: string[];
+  downvotes?: number;
+  dislikedBy?: string[];
+  createdAt: Date | number;
+}): DiscussionMessage {
+  const createdAtMs = typeof doc.createdAt === 'number' ? doc.createdAt : new Date(doc.createdAt).getTime();
+  return {
+    id: doc.id,
+    questionId: doc.questionId,
+    author: doc.author,
+    authorType: doc.authorType,
+    createdBy: doc.createdBy,
+    content: doc.content,
+    replyTo: doc.replyTo,
+    upvotes: doc.upvotes || 0,
+    likedBy: doc.likedBy || [],
+    downvotes: doc.downvotes || 0,
+    dislikedBy: doc.dislikedBy || [],
+    createdAt: createdAtMs,
+  };
 }
 
 async function generateAgentQuestion(actor: UserAuthor): Promise<{ title: string; description: string; tags: string[] }> {
@@ -64,7 +129,6 @@ async function generateAgentQuestion(actor: UserAuthor): Promise<{ title: string
       const parsed = JSON.parse(match[0]);
       const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
       const description = typeof parsed.description === 'string' ? parsed.description.trim() : '';
-      // 标题至少8个字且不能和描述一样
       if (title.length >= 8 && description.length >= 10 && title !== description) {
         return { title, description, tags: normalizeTags(parsed.tags) };
       }
@@ -73,7 +137,6 @@ async function generateAgentQuestion(actor: UserAuthor): Promise<{ title: string
     // fallback below
   }
 
-  // 高质量 fallback 池
   const fallbacks = [
     { title: '为什么有些高效方法知道了却坚持不下去？', description: '很多方法论看上去都对，但真正执行时总会半途而废。问题到底出在动力、环境，还是反馈机制？', tags: ['学习', '心理学', '自我管理'] },
     { title: '30岁以后，你最后悔没有早点知道的道理是什么？', description: '回头看走过的路，总有一些弯路是可以避免的。想听听过来人的真实经验。', tags: ['成长', '人生', '经验'] },
@@ -187,15 +250,15 @@ async function decideAction(
 async function pickInterestedQuestion(
   actor: UserAuthor,
   questions: Question[],
-  messagesMap: Record<string, DiscussionMessage[]>
+  messageCountMap: Map<string, number>
 ): Promise<{ question: Question; reason: string } | null> {
   if (questions.length === 0) return null;
 
   const ranked = [...questions]
     .map((question) => ({
       question,
-      messageCount: (messagesMap[question.id] || []).length,
-      heat: (question.upvotes || 0) + (messagesMap[question.id] || []).length,
+      messageCount: messageCountMap.get(question.id) || 0,
+      heat: (question.upvotes || 0) + (messageCountMap.get(question.id) || 0),
     }))
     .sort((a, b) => b.heat - a.heat)
     .slice(0, 12);
@@ -262,12 +325,48 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as ParticipateRequest;
     const actor = body?.actor;
-    const questions = Array.isArray(body?.questions) ? body.questions : [];
-    const messages = body?.messages && typeof body.messages === 'object' ? body.messages : {};
     const trigger = body?.trigger === 'auto' ? 'auto' : 'manual';
 
     if (!actor?.id || !actor?.name) {
       return NextResponse.json({ error: 'Missing actor information' }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const questionDocs = await QuestionModel.find()
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    const questions = (questionDocs as Array<{
+      id: string;
+      title: string;
+      description?: string;
+      tags?: string[];
+      author?: UserAuthor;
+      createdBy?: 'human' | 'agent' | 'system';
+      createdAt: Date | number;
+      status?: 'discussing' | 'waiting' | 'active';
+      discussionRounds?: number;
+      upvotes?: number;
+      likedBy?: string[];
+      downvotes?: number;
+      dislikedBy?: string[];
+    }>).map(toQuestion);
+
+    const questionIds = questions.map((q) => q.id).filter(Boolean);
+    const messageCountMap = new Map<string, number>();
+    if (questionIds.length > 0) {
+      const countDocs = await MessageModel.aggregate([
+        { $match: { questionId: { $in: questionIds } } },
+        { $group: { _id: '$questionId', count: { $sum: 1 } } },
+      ]);
+
+      for (const item of countDocs as Array<{ _id: string; count: number }>) {
+        if (item?._id) {
+          messageCountMap.set(item._id, Number(item.count) || 0);
+        }
+      }
     }
 
     let action: ParticipationAction =
@@ -306,11 +405,24 @@ export async function POST(request: NextRequest) {
         content: questionDraft.description,
         upvotes: 0,
         likedBy: [],
+        downvotes: 0,
+        dislikedBy: [],
         createdAt: Date.now(),
       };
       reason = '开启了一个新的感兴趣话题';
+
+      await QuestionModel.findOneAndUpdate(
+        { id: newQuestion.id },
+        { ...newQuestion },
+        { upsert: true, returnDocument: 'after' }
+      );
+      await MessageModel.findOneAndUpdate(
+        { id: questionMessage.id },
+        { ...questionMessage },
+        { upsert: true, returnDocument: 'after' }
+      );
     } else {
-      const picked = await pickInterestedQuestion(actor, questions, messages);
+      const picked = await pickInterestedQuestion(actor, questions, messageCountMap);
       if (!picked) {
         action = 'ask_new';
         const questionDraft = await generateAgentQuestion(actor);
@@ -337,11 +449,42 @@ export async function POST(request: NextRequest) {
           content: questionDraft.description,
           upvotes: 0,
           likedBy: [],
+          downvotes: 0,
+          dislikedBy: [],
           createdAt: Date.now(),
         };
         reason = '未找到可回复的问题，改为发起新问题';
+
+        await QuestionModel.findOneAndUpdate(
+          { id: newQuestion.id },
+          { ...newQuestion },
+          { upsert: true, returnDocument: 'after' }
+        );
+        await MessageModel.findOneAndUpdate(
+          { id: questionMessage.id },
+          { ...questionMessage },
+          { upsert: true, returnDocument: 'after' }
+        );
       } else {
-        const targetMessages = messages[picked.question.id] || [];
+        const targetDocs = await MessageModel.find({ questionId: picked.question.id })
+          .sort({ createdAt: 1 })
+          .lean();
+
+        const targetMessages = (targetDocs as Array<{
+          id: string;
+          questionId: string;
+          author: UserAuthor;
+          authorType: 'ai' | 'user';
+          createdBy?: 'human' | 'agent' | 'system';
+          content: string;
+          replyTo?: string;
+          upvotes?: number;
+          likedBy?: string[];
+          downvotes?: number;
+          dislikedBy?: string[];
+          createdAt: Date | number;
+        }>).map(toMessage);
+
         const replyContent = await generateAgentReply(actor, picked.question, targetMessages);
         const replyTo = targetMessages.length > 0 ? targetMessages[targetMessages.length - 1].id : undefined;
 
@@ -355,10 +498,25 @@ export async function POST(request: NextRequest) {
           replyTo,
           upvotes: 0,
           likedBy: [],
+          downvotes: 0,
+          dislikedBy: [],
           createdAt: Date.now(),
         };
         replyQuestionId = picked.question.id;
         reason = picked.reason;
+
+        await MessageModel.findOneAndUpdate(
+          { id: replyMessage.id },
+          { ...replyMessage },
+          { upsert: true, returnDocument: 'after' }
+        );
+        await QuestionModel.findOneAndUpdate(
+          { id: picked.question.id },
+          {
+            status: 'active',
+            discussionRounds: (picked.question.discussionRounds || 0) + 1,
+          }
+        );
       }
     }
 

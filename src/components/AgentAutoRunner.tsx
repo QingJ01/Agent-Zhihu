@@ -9,127 +9,53 @@ const AUTO_INTERVAL_MS = 2 * 60 * 1000;
 const LOGIN_BOOTSTRAP_KEY = 'agent-zhihu-auto-bootstrap';
 const AUTO_ENABLED_KEY = 'agent-zhihu-auto-enabled';
 
-interface QuestionsStore {
-  questions: Question[];
-  messages: Record<string, DiscussionMessage[]>;
+async function consumeDiscussionStream(response: Response): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) return;
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmedLine = line.replace(/\r$/, '');
+      if (!trimmedLine.startsWith('data: ')) continue;
+
+      try {
+        const payload = JSON.parse(trimmedLine.slice(6));
+        if (payload?.status || payload?.message) {
+          window.dispatchEvent(new CustomEvent('agent-zhihu-store-updated'));
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+  }
 }
 
-function loadStore(): QuestionsStore {
+async function fetchQuestionThread(questionId: string): Promise<{ question: Question; messages: DiscussionMessage[] } | null> {
   try {
-    const raw = localStorage.getItem('agent-zhihu-questions');
-    if (raw) return JSON.parse(raw);
+    const response = await fetch(`/api/questions/${questionId}`);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data?.question) return null;
+    return {
+      question: data.question,
+      messages: data.messages || [],
+    };
   } catch (error) {
-    console.error('Failed to load questions store:', error);
-  }
-  return { questions: [], messages: {} };
-}
-
-function saveStore(store: QuestionsStore) {
-  try {
-    localStorage.setItem('agent-zhihu-questions', JSON.stringify(store));
-  } catch (error) {
-    console.error('Failed to save questions store:', error);
+    console.error('Failed to fetch question thread:', error);
+    return null;
   }
 }
 
-async function runParticipation(
-  actor: { id: string; name: string; avatar?: string | null },
-  forceAction?: 'ask_new' | 'reply_existing'
-) {
-  const store = loadStore();
-
-  const response = await fetch('/api/agent/participate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      actor,
-      questions: store.questions || [],
-      messages: store.messages || {},
-      trigger: 'auto',
-      forceAction,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'unknown');
-    console.warn(`Agent participate failed: ${response.status} - ${errorText}`);
-    return;
-  }
-
-  const result = await response.json();
-  const newQuestion: Question | null = result.question;
-  const questionMessage: DiscussionMessage | null = result.questionMessage;
-  const replyMessage: DiscussionMessage | null = result.replyMessage;
-  const replyQuestionId: string | null = result.replyQuestionId;
-
-  const nextStore: QuestionsStore = {
-    questions: [...(store.questions || [])],
-    messages: { ...(store.messages || {}) },
-  };
-
-  if (newQuestion && questionMessage) {
-    nextStore.questions = [newQuestion, ...nextStore.questions].slice(0, 50);
-    nextStore.messages[newQuestion.id] = [questionMessage];
-  }
-
-  if (replyMessage && replyQuestionId) {
-    const existing = nextStore.messages[replyQuestionId] || [];
-    nextStore.messages[replyQuestionId] = [...existing, replyMessage];
-
-    nextStore.questions = nextStore.questions.map((question) =>
-      question.id === replyQuestionId
-        ? { ...question, status: 'active', discussionRounds: (question.discussionRounds || 0) + 1 }
-        : question
-    );
-  }
-
-  saveStore(nextStore);
-  window.dispatchEvent(new CustomEvent('agent-zhihu-store-updated'));
-
-  // 触发 AI 专家讨论
-  const targetQuestion = newQuestion || (replyQuestionId ? nextStore.questions.find(q => q.id === replyQuestionId) : null);
-  if (targetQuestion) {
-    await triggerExpertDiscussion(targetQuestion, nextStore.messages[targetQuestion.id] || []);
-  }
-}
-
-// 系统自动生成问题（不绑定用户账号）
-async function runSystemGenerate() {
-  const store = loadStore();
-
-  // 检查最近是否有新问题（2分钟内）
-  const latestQuestion = store.questions[0];
-  if (latestQuestion && Date.now() - latestQuestion.createdAt < AUTO_INTERVAL_MS) {
-    return; // 2分钟内有新问题，跳过
-  }
-
-  // 用 GET /api/questions 生成系统问题
-  const res = await fetch('/api/questions');
-  if (!res.ok) throw new Error('System question generate failed');
-
-  const question: Question = await res.json();
-
-  // 校验返回数据有效性
-  if (!question.title || !question.title.trim()) {
-    console.warn('[runSystemGenerate] Generated question has empty title, skipping:', question);
-    return;
-  }
-
-  question.createdBy = 'system';
-
-  const nextStore: QuestionsStore = {
-    questions: [question, ...(store.questions || [])].slice(0, 50),
-    messages: { ...(store.messages || {}), [question.id]: [] },
-  };
-
-  saveStore(nextStore);
-  window.dispatchEvent(new CustomEvent('agent-zhihu-store-updated'));
-
-  // 触发 AI 专家讨论
-  await triggerExpertDiscussion(question, []);
-}
-
-// 触发 AI 专家讨论并保存结果
 async function triggerExpertDiscussion(question: Question, existingMessages: DiscussionMessage[]) {
   try {
     const response = await fetch('/api/questions', {
@@ -143,76 +69,97 @@ async function triggerExpertDiscussion(question: Question, existingMessages: Dis
       return;
     }
 
-    const reader = response.body?.getReader();
-    if (!reader) return;
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    const collectedMessages = [...existingMessages];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmedLine = line.replace(/\r$/, '');
-        if (trimmedLine.startsWith('data: ')) {
-          try {
-            const parsed = JSON.parse(trimmedLine.slice(6));
-
-            // 单条消息事件（有 id 和 content）
-            if (parsed.id && parsed.content && parsed.questionId) {
-              collectedMessages.push(parsed);
-              // 逐条保存到 localStorage
-              const store = loadStore();
-              store.messages[question.id] = [...collectedMessages];
-              saveStore(store);
-              window.dispatchEvent(new CustomEvent('agent-zhihu-store-updated'));
-            }
-
-            // 完成事件（有 status）
-            if (parsed.status && parsed.messages) {
-              const store = loadStore();
-              const updatedQuestion = { ...question, status: parsed.status, discussionRounds: parsed.discussionRounds };
-              store.questions = store.questions.map((q) =>
-                q.id === question.id ? updatedQuestion : q
-              );
-              store.messages[question.id] = parsed.messages;
-              saveStore(store);
-              window.dispatchEvent(new CustomEvent('agent-zhihu-store-updated'));
-            }
-          } catch { }
-        }
-      }
-    }
+    await consumeDiscussionStream(response);
   } catch (error) {
     console.error('Expert discussion trigger failed:', error);
   }
+}
+
+async function runParticipation(
+  actor: { id: string; name: string; avatar?: string | null },
+  forceAction?: 'ask_new' | 'reply_existing'
+) {
+  const response = await fetch('/api/agent/participate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      actor,
+      trigger: 'auto',
+      forceAction,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'unknown');
+    console.warn(`Agent participate failed: ${response.status} - ${errorText}`);
+    return;
+  }
+
+  const result = await response.json();
+  const questionId: string | null = result.question?.id || result.replyQuestionId || null;
+
+  window.dispatchEvent(new CustomEvent('agent-zhihu-store-updated'));
+
+  if (!questionId) return;
+  const thread = await fetchQuestionThread(questionId);
+  if (!thread) return;
+
+  await triggerExpertDiscussion(thread.question, thread.messages);
+}
+
+async function runSystemGenerate() {
+  let shouldGenerate = true;
+
+  try {
+    const latestRes = await fetch('/api/questions?action=list&limit=1');
+    if (latestRes.ok) {
+      const latestQuestions = await latestRes.json();
+      const latestQuestion = Array.isArray(latestQuestions) ? latestQuestions[0] : null;
+      if (latestQuestion?.createdAt && Date.now() - Number(latestQuestion.createdAt) < AUTO_INTERVAL_MS) {
+        shouldGenerate = false;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load latest questions:', error);
+  }
+
+  if (!shouldGenerate) {
+    return;
+  }
+
+  const generateRes = await fetch('/api/questions');
+  if (!generateRes.ok) {
+    throw new Error('System question generate failed');
+  }
+
+  const question: Question = await generateRes.json();
+  if (!question.title || !question.title.trim()) {
+    console.warn('[runSystemGenerate] Generated question has empty title, skipping:', question);
+    return;
+  }
+
+  question.createdBy = 'system';
+
+  await triggerExpertDiscussion(question, []);
 }
 
 export function AgentAutoRunner() {
   const { data: session } = useSession();
   const isRunningRef = useRef(false);
 
-  // 用户控制开关（默认关闭）
   const [enabled, setEnabled] = useState(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(AUTO_ENABLED_KEY) === 'true';
   });
 
   const toggleEnabled = useCallback(() => {
-    setEnabled(prev => {
+    setEnabled((prev) => {
       const next = !prev;
       localStorage.setItem(AUTO_ENABLED_KEY, String(next));
       return next;
     });
   }, []);
 
-  // 系统定时器：2分钟无新问题就自动生成（始终开启）
   useEffect(() => {
     let disposed = false;
 
@@ -228,13 +175,14 @@ export function AgentAutoRunner() {
       }
     };
 
-    // 首次启动延迟检查
     const initTimer = setTimeout(() => {
-      if (!disposed) runSystemSafe();
+      if (!disposed) {
+        void runSystemSafe();
+      }
     }, 5000);
 
     const timer = setInterval(() => {
-      runSystemSafe();
+      void runSystemSafe();
     }, AUTO_INTERVAL_MS);
 
     return () => {
@@ -244,7 +192,6 @@ export function AgentAutoRunner() {
     };
   }, []);
 
-  // 用户分身定时器：登录后自动回复已有问题（仅在 enabled 时）
   useEffect(() => {
     if (!enabled || !session?.user?.id) return;
 
@@ -268,15 +215,16 @@ export function AgentAutoRunner() {
       }
     };
 
-    // 登录后首次触发一次回复
     const bootstrapped = sessionStorage.getItem(LOGIN_BOOTSTRAP_KEY);
     if (!bootstrapped) {
       sessionStorage.setItem(LOGIN_BOOTSTRAP_KEY, `${session.user.id}:${Date.now()}`);
-      setTimeout(() => runReplySafe(), 3000);
+      setTimeout(() => {
+        void runReplySafe();
+      }, 3000);
     }
 
     const timer = setInterval(() => {
-      runReplySafe();
+      void runReplySafe();
     }, AUTO_INTERVAL_MS + 30000);
 
     return () => {
@@ -285,12 +233,10 @@ export function AgentAutoRunner() {
     };
   }, [enabled, session?.user?.id, session?.user?.name, session?.user?.image]);
 
-  // 未登录时隐藏按钮（系统自动出题仍会运行）
   if (!session?.user?.id) {
     return null;
   }
 
-  // 渲染控制按钮（固定在右下角）
   return (
     <button
       onClick={toggleEnabled}

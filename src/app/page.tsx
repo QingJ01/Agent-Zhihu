@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { Question, DiscussionMessage } from '@/types/zhihu';
+import { Question } from '@/types/zhihu';
 import { QuestionCard } from '@/components/QuestionCard';
 import { HotList } from '@/components/HotList';
 import { TagCloud } from '@/components/TagCloud';
@@ -11,7 +11,7 @@ import { Icons } from '@/components/Icons';
 import { AppHeader } from '@/components/AppHeader';
 
 type TabType = 'recommend' | 'hot' | 'new';
-type QuestionWithCount = Question & { messageCount?: number };
+type QuestionWithCount = Question & { messageCount?: number; isFavorited?: boolean };
 
 function extractTagsFromText(text: string): string[] {
   const matches = [...text.matchAll(/#([\u4e00-\u9fa5A-Za-z0-9_-]{1,12})/g)];
@@ -64,72 +64,30 @@ export default function Home() {
   const contentInputRef = useRef<HTMLTextAreaElement | null>(null);
   const quickEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '🎉', '🔥', '✅', '❌', '🙏', '💡'];
 
-  const syncQuestionsFromLocalStorage = useCallback(() => {
-    try {
-      const stored = localStorage.getItem('agent-zhihu-questions');
-      if (stored) {
-        const data = JSON.parse(stored);
-        const questionsWithCount = (data.questions || []).map((q: Question) => ({
-          ...q,
-          messageCount: (data.messages?.[q.id] || []).length,
-        }));
-        setQuestions(questionsWithCount);
-      }
-    } catch (error) {
-      console.error('Failed to load questions:', error);
-    }
-  }, []);
-
-  // 从服务器加载问题
   const loadQuestionsFromServer = useCallback(async () => {
     try {
       const response = await fetch('/api/questions?action=list&limit=50');
       if (response.ok) {
-        const serverQuestions: Question[] = await response.json();
-
-        // 合并服务器数据到 localStorage（服务器数据优先）
-        const stored = localStorage.getItem('agent-zhihu-questions');
-        const localData = stored ? JSON.parse(stored) : { questions: [], messages: {} };
-
-        // 创建问题ID映射，避免重复
-        const questionMap = new Map();
-        serverQuestions.forEach(q => questionMap.set(q.id, q));
-        localData.questions.forEach((q: Question) => {
-          if (!questionMap.has(q.id)) {
-            questionMap.set(q.id, q);
-          }
-        });
-
-        const mergedQuestions = Array.from(questionMap.values())
-          .sort((a, b) => b.createdAt - a.createdAt)
-          .slice(0, 50);
-
-        const mergedData = {
-          questions: mergedQuestions,
-          messages: localData.messages,
-        };
-
-        localStorage.setItem('agent-zhihu-questions', JSON.stringify(mergedData));
-
-        const questionsWithCount = mergedQuestions.map((q: Question) => ({
-          ...q,
-          messageCount: (mergedData.messages?.[q.id] || []).length,
-        }));
-        setQuestions(questionsWithCount);
+        const serverQuestions: QuestionWithCount[] = await response.json();
+        setQuestions(serverQuestions);
+        setQuestionFavorites(
+          serverQuestions.reduce<Record<string, boolean>>((acc, item) => {
+            acc[item.id] = !!item.isFavorited;
+            return acc;
+          }, {})
+        );
       }
     } catch (error) {
       console.error('Failed to load questions from server:', error);
-      // 如果服务器加载失败，回退到 localStorage
-      syncQuestionsFromLocalStorage();
     }
-  }, [syncQuestionsFromLocalStorage]);
+  }, []);
 
   // 初始加载：优先从服务器加载
   useEffect(() => {
     loadQuestionsFromServer();
 
     const onStoreUpdated = () => {
-      syncQuestionsFromLocalStorage();
+      loadQuestionsFromServer();
     };
 
     window.addEventListener('agent-zhihu-store-updated', onStoreUpdated);
@@ -143,7 +101,7 @@ export default function Home() {
       window.removeEventListener('agent-zhihu-store-updated', onStoreUpdated);
       clearInterval(pollInterval);
     };
-  }, [loadQuestionsFromServer, syncQuestionsFromLocalStorage]);
+  }, [loadQuestionsFromServer]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -210,35 +168,6 @@ export default function Home() {
     }
   }, [questions, activeTab, filterTag, searchQuery]);
 
-  useEffect(() => {
-    const userId = session?.user?.id;
-    if (!userId || questions.length === 0) {
-      setQuestionFavorites({});
-      return;
-    }
-
-    const controller = new AbortController();
-    const loadFavoriteStatuses = async () => {
-      try {
-        const ids = questions.map((q) => q.id).join(',');
-        const response = await fetch(`/api/favorites?targetType=question&targetIds=${encodeURIComponent(ids)}`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) return;
-        const data = await response.json();
-        setQuestionFavorites(data.statuses || {});
-      } catch (error) {
-        if ((error as { name?: string }).name !== 'AbortError') {
-          console.error('Failed to load question favorite statuses:', error);
-        }
-      }
-    };
-
-    loadFavoriteStatuses();
-    return () => controller.abort();
-  }, [questions, session?.user?.id]);
-
   const handleQuestionLikeChange = useCallback(
     (questionId: string, payload: { liked: boolean; downvoted: boolean; upvotes: number; downvotes: number }) => {
       setQuestions((prev) =>
@@ -292,31 +221,20 @@ export default function Home() {
         body: JSON.stringify({ question, messages: [] }),
       }).catch(err => console.error('Failed to persist question to DB:', err));
 
-      // 同步更新本地缓存
-      const stored = localStorage.getItem('agent-zhihu-questions');
-      const store = stored ? JSON.parse(stored) : { questions: [], messages: {} as Record<string, DiscussionMessage[]> };
-      const nextStore = {
-        questions: [question, ...(store.questions || [])].slice(0, 50),
-        messages: {
-          ...(store.messages || {}),
-          [question.id]: [],
-        } as Record<string, DiscussionMessage[]>,
-      };
-      localStorage.setItem('agent-zhihu-questions', JSON.stringify(nextStore));
-
-      setQuestions(nextStore.questions.map((q: Question) => ({
-        ...q,
-        messageCount: (nextStore.messages[q.id] || []).length,
-      })));
+      setQuestions((prev) => [{ ...question, messageCount: 0, isFavorited: false }, ...prev].slice(0, 50));
+      setQuestionFavorites((prev) => ({ ...prev, [question.id]: false }));
       setUserQuestionInput('');
       setUserQuestionTitle('');
       setActiveTab('new');
+      setTimeout(() => {
+        loadQuestionsFromServer();
+      }, 1200);
     } catch (error) {
       console.error('Submit question error:', error);
     } finally {
       setIsSubmittingUserQuestion(false);
     }
-  }, [session, userQuestionInput, userQuestionTitle, isSubmittingUserQuestion]);
+  }, [session, userQuestionInput, userQuestionTitle, isSubmittingUserQuestion, loadQuestionsFromServer]);
 
   const insertIntoQuestionInput = useCallback((text: string) => {
     const input = contentInputRef.current;

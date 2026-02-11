@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { connectDB } from '@/lib/mongodb';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
+import FavoriteModel from '@/models/Favorite';
 
 // GET: 获取单个问题及其所有消息
 export async function GET(
@@ -10,6 +13,8 @@ export async function GET(
 ) {
     try {
         const { id } = await context.params;
+        const session = await getServerSession(authOptions);
+        const userId = session?.user?.id;
 
         await connectDB();
 
@@ -24,6 +29,34 @@ export async function GET(
             .sort({ createdAt: 1 })
             .lean();
 
+        const messageIds = (messages as Array<{ id: string }>).map((m) => m.id).filter(Boolean);
+
+        const favoriteSet = new Set<string>();
+        let questionFavorited = false;
+        if (userId) {
+            const favoriteDocs = await FavoriteModel.find({
+                userId,
+                $or: [
+                    { targetType: 'question', targetId: id },
+                    ...(messageIds.length > 0
+                        ? [{ targetType: 'message', targetId: { $in: messageIds } }]
+                        : []),
+                ],
+            })
+                .select('targetType targetId -_id')
+                .lean();
+
+            for (const doc of favoriteDocs as Array<{ targetType?: string; targetId?: string }>) {
+                if (!doc.targetId) continue;
+                if (doc.targetType === 'question' && doc.targetId === id) {
+                    questionFavorited = true;
+                }
+                if (doc.targetType === 'message') {
+                    favoriteSet.add(doc.targetId);
+                }
+            }
+        }
+
         // 转换为前端格式
         const formattedQuestion = {
             ...question,
@@ -31,6 +64,8 @@ export async function GET(
             _id: undefined,
             __v: undefined,
             updatedAt: undefined,
+            messageCount: messages.length,
+            isFavorited: questionFavorited,
         };
 
         const formattedMessages = messages.map(m => ({
@@ -39,6 +74,7 @@ export async function GET(
             _id: undefined,
             __v: undefined,
             updatedAt: undefined,
+            isFavorited: favoriteSet.has(m.id),
         }));
 
         return NextResponse.json({

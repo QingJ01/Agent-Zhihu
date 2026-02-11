@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getServerSession } from 'next-auth';
+import { createHash } from 'crypto';
 import { Question, DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { AI_EXPERTS, selectExperts, getRandomExperts } from '@/lib/experts';
 import { connectDB } from '@/lib/mongodb';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
+import FavoriteModel from '@/models/Favorite';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -14,6 +18,19 @@ const openai = new OpenAI({
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DISCUSSION_ROUNDS = 4;
 const QUESTION_GENERATION_ATTEMPTS = 2;
+
+function computeETag(input: string): string {
+    const hash = createHash('sha1').update(input).digest('hex');
+    return `W/"${hash}"`;
+}
+
+function parseIfNoneMatch(header: string | null): string[] {
+    if (!header) return [];
+    return header
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
 
 const QUESTION_TOPIC_SEEDS = [
     '职场选择与成长',
@@ -297,17 +314,77 @@ export async function GET(request: NextRequest) {
 
         // 如果是获取列表，从数据库读取
         if (action === 'list') {
+            const session = await getServerSession(authOptions);
+            const userId = session?.user?.id;
+
             await connectDB();
             const questions = await QuestionModel.find()
                 .sort({ createdAt: -1 })
                 .limit(limit)
                 .lean();
 
-            return NextResponse.json(questions.map(q => ({
+            const questionIds = (questions as Array<{ id: string }>).map((q) => q.id).filter(Boolean);
+
+            const messageCountMap = new Map<string, number>();
+            if (questionIds.length > 0) {
+                const counts = await MessageModel.aggregate([
+                    { $match: { questionId: { $in: questionIds } } },
+                    { $group: { _id: '$questionId', count: { $sum: 1 } } },
+                ]);
+
+                for (const item of counts as Array<{ _id: string; count: number }>) {
+                    if (item?._id) {
+                        messageCountMap.set(item._id, Number(item.count) || 0);
+                    }
+                }
+            }
+
+            const favoriteSet = new Set<string>();
+            if (userId && questionIds.length > 0) {
+                const favoriteDocs = await FavoriteModel.find({
+                    userId,
+                    targetType: 'question',
+                    targetId: { $in: questionIds },
+                })
+                    .select('targetId -_id')
+                    .lean();
+
+                for (const doc of favoriteDocs as Array<{ targetId?: string }>) {
+                    if (doc.targetId) {
+                        favoriteSet.add(doc.targetId);
+                    }
+                }
+            }
+
+            const payload = questions.map((q) => ({
                 ...q,
+                createdAt: new Date(q.createdAt).getTime(),
                 _id: undefined,
                 __v: undefined,
-            })));
+                updatedAt: undefined,
+                messageCount: messageCountMap.get(q.id) || 0,
+                isFavorited: favoriteSet.has(q.id),
+            }));
+
+            const cacheControl = userId
+                ? 'private, no-store'
+                : 'public, s-maxage=20, stale-while-revalidate=120';
+
+            const etagPayload = JSON.stringify({ userId: userId || 'anonymous', payload });
+            const etag = computeETag(etagPayload);
+            const candidates = parseIfNoneMatch(request.headers.get('if-none-match'));
+            const isNotModified = candidates.includes(etag) || candidates.includes('*');
+
+            const headers = {
+                'Cache-Control': cacheControl,
+                ETag: etag,
+            };
+
+            if (isNotModified) {
+                return new NextResponse(null, { status: 304, headers });
+            }
+
+            return NextResponse.json(payload, { headers });
         }
 
         // 默认：生成新问题
