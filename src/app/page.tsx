@@ -64,9 +64,13 @@ export default function Home() {
   const contentInputRef = useRef<HTMLTextAreaElement | null>(null);
   const quickEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '🎉', '🔥', '✅', '❌', '🙏', '💡'];
 
-  const loadQuestionsFromServer = useCallback(async () => {
+  const loadQuestionsFromServer = useCallback(async (query?: string) => {
     try {
-      const response = await fetch('/api/questions?action=list&limit=50');
+      const trimmedQuery = (query || '').trim();
+      const endpoint = trimmedQuery
+        ? `/api/questions?action=search&limit=100&q=${encodeURIComponent(trimmedQuery)}`
+        : '/api/questions?action=list&limit=50';
+      const response = await fetch(endpoint);
       if (response.ok) {
         const serverQuestions: QuestionWithCount[] = await response.json();
         setQuestions(serverQuestions);
@@ -84,24 +88,24 @@ export default function Home() {
 
   // 初始加载：优先从服务器加载
   useEffect(() => {
-    loadQuestionsFromServer();
+    loadQuestionsFromServer(searchQuery);
 
     const onStoreUpdated = () => {
-      loadQuestionsFromServer();
+      loadQuestionsFromServer(searchQuery);
     };
 
     window.addEventListener('agent-zhihu-store-updated', onStoreUpdated);
 
     // 自动轮询：每30秒从服务器刷新一次
     const pollInterval = setInterval(() => {
-      loadQuestionsFromServer();
+      loadQuestionsFromServer(searchQuery);
     }, 30000); // 30秒
 
     return () => {
       window.removeEventListener('agent-zhihu-store-updated', onStoreUpdated);
       clearInterval(pollInterval);
     };
-  }, [loadQuestionsFromServer]);
+  }, [loadQuestionsFromServer, searchQuery]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -134,19 +138,9 @@ export default function Home() {
 
   // 排序后的问题列表
   const sortedQuestions = useMemo(() => {
-    let filtered = filterTag
+    const filtered = filterTag
       ? (questions || []).filter((q: QuestionWithCount) => q.tags?.includes(filterTag))
       : (questions || []);
-
-    // 搜索过滤
-    if (searchQuery.trim()) {
-      const query = searchQuery.trim().toLowerCase();
-      filtered = filtered.filter((q: QuestionWithCount) =>
-        q.title.toLowerCase().includes(query) ||
-        (q.description || '').toLowerCase().includes(query) ||
-        q.tags?.some(t => t.toLowerCase().includes(query))
-      );
-    }
 
     switch (activeTab) {
       case 'hot':
@@ -166,7 +160,7 @@ export default function Home() {
           return (heatB / (ageB + 1)) - (heatA / (ageA + 1));
         });
     }
-  }, [questions, activeTab, filterTag, searchQuery]);
+  }, [questions, activeTab, filterTag]);
 
   const handleQuestionLikeChange = useCallback(
     (questionId: string, payload: { liked: boolean; downvoted: boolean; upvotes: number; downvotes: number }) => {
@@ -227,14 +221,14 @@ export default function Home() {
       setUserQuestionTitle('');
       setActiveTab('new');
       setTimeout(() => {
-        loadQuestionsFromServer();
+        loadQuestionsFromServer(searchQuery);
       }, 1200);
     } catch (error) {
       console.error('Submit question error:', error);
     } finally {
       setIsSubmittingUserQuestion(false);
     }
-  }, [session, userQuestionInput, userQuestionTitle, isSubmittingUserQuestion, loadQuestionsFromServer]);
+  }, [session, userQuestionInput, userQuestionTitle, isSubmittingUserQuestion, loadQuestionsFromServer, searchQuery]);
 
   const insertIntoQuestionInput = useCallback((text: string) => {
     const input = contentInputRef.current;
@@ -502,7 +496,7 @@ export default function Home() {
           {/* Sidebar */}
           <div className="hidden lg:block space-y-[10px]">
             <CreatorCenter questions={questions} />
-            <HotList questions={questions} />
+            <HotList />
             <TagCloud tags={tagStats} onTagClick={setFilterTag} />
 
             <footer className="text-[13px] text-[var(--zh-text-gray)] px-2 leading-relaxed">

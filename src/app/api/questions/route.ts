@@ -32,6 +32,10 @@ function parseIfNoneMatch(header: string | null): string[] {
         .filter(Boolean);
 }
 
+function escapeRegExp(input: string): string {
+    return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const QUESTION_TOPIC_SEEDS = [
     '职场选择与成长',
     '亲密关系与家庭',
@@ -311,6 +315,7 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams;
         const action = searchParams.get('action');
         const limit = parseInt(searchParams.get('limit') || '50', 10);
+        const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
 
         // 如果是获取列表，从数据库读取
         if (action === 'list') {
@@ -371,6 +376,206 @@ export async function GET(request: NextRequest) {
                 : 'public, s-maxage=20, stale-while-revalidate=120';
 
             const etagPayload = JSON.stringify({ userId: userId || 'anonymous', payload });
+            const etag = computeETag(etagPayload);
+            const candidates = parseIfNoneMatch(request.headers.get('if-none-match'));
+            const isNotModified = candidates.includes(etag) || candidates.includes('*');
+
+            const headers = {
+                'Cache-Control': cacheControl,
+                ETag: etag,
+            };
+
+            if (isNotModified) {
+                return new NextResponse(null, { status: 304, headers });
+            }
+
+            return NextResponse.json(payload, { headers });
+        }
+
+        if (action === 'hot') {
+            const session = await getServerSession(authOptions);
+            const userId = session?.user?.id;
+            const safeLimit = Math.min(Math.max(limit, 1), 100);
+            const hotStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+            await connectDB();
+
+            const hotDocs = await QuestionModel.aggregate([
+                { $match: { createdAt: { $gte: hotStartDate } } },
+                {
+                    $lookup: {
+                        from: 'messages',
+                        localField: 'id',
+                        foreignField: 'questionId',
+                        as: 'relatedMessages',
+                    },
+                },
+                {
+                    $addFields: {
+                        messageCount: { $size: '$relatedMessages' },
+                    },
+                },
+                {
+                    $addFields: {
+                        heat: {
+                            $add: [
+                                { $multiply: [{ $ifNull: ['$upvotes', 0] }, 2] },
+                                '$messageCount',
+                            ],
+                        },
+                    },
+                },
+                { $sort: { heat: -1, createdAt: -1 } },
+                { $skip: offset },
+                { $limit: safeLimit },
+                {
+                    $project: {
+                        relatedMessages: 0,
+                        heat: 0,
+                    },
+                },
+            ]);
+
+            const questionIds = (hotDocs as Array<{ id: string }>).map((q) => q.id).filter(Boolean);
+            const favoriteSet = new Set<string>();
+
+            if (userId && questionIds.length > 0) {
+                const favoriteDocs = await FavoriteModel.find({
+                    userId,
+                    targetType: 'question',
+                    targetId: { $in: questionIds },
+                })
+                    .select('targetId -_id')
+                    .lean();
+
+                for (const doc of favoriteDocs as Array<{ targetId?: string }>) {
+                    if (doc.targetId) {
+                        favoriteSet.add(doc.targetId);
+                    }
+                }
+            }
+
+            const payload = (hotDocs as Array<{
+                id: string;
+                createdAt: Date | number;
+                messageCount?: number;
+                [key: string]: unknown;
+            }>).map((q) => ({
+                ...q,
+                createdAt: new Date(q.createdAt).getTime(),
+                _id: undefined,
+                __v: undefined,
+                updatedAt: undefined,
+                messageCount: Number(q.messageCount) || 0,
+                isFavorited: favoriteSet.has(q.id),
+            }));
+
+            const cacheControl = userId
+                ? 'private, no-store'
+                : 'public, s-maxage=20, stale-while-revalidate=120';
+
+            const etagPayload = JSON.stringify({
+                userId: userId || 'anonymous',
+                action: 'hot',
+                offset,
+                limit: safeLimit,
+                payload,
+            });
+            const etag = computeETag(etagPayload);
+            const candidates = parseIfNoneMatch(request.headers.get('if-none-match'));
+            const isNotModified = candidates.includes(etag) || candidates.includes('*');
+
+            const headers = {
+                'Cache-Control': cacheControl,
+                ETag: etag,
+            };
+
+            if (isNotModified) {
+                return new NextResponse(null, { status: 304, headers });
+            }
+
+            return NextResponse.json(payload, { headers });
+        }
+
+        if (action === 'search') {
+            const session = await getServerSession(authOptions);
+            const userId = session?.user?.id;
+            const safeLimit = Math.min(Math.max(limit, 1), 100);
+            const query = (searchParams.get('q') || '').trim();
+
+            if (!query) {
+                return NextResponse.json([]);
+            }
+
+            await connectDB();
+
+            const keywordRegex = new RegExp(escapeRegExp(query), 'i');
+            const questions = await QuestionModel.find({
+                $or: [
+                    { title: keywordRegex },
+                    { description: keywordRegex },
+                    { tags: keywordRegex },
+                ],
+            })
+                .sort({ createdAt: -1 })
+                .skip(offset)
+                .limit(safeLimit)
+                .lean();
+
+            const questionIds = (questions as Array<{ id: string }>).map((q) => q.id).filter(Boolean);
+            const messageCountMap = new Map<string, number>();
+            if (questionIds.length > 0) {
+                const counts = await MessageModel.aggregate([
+                    { $match: { questionId: { $in: questionIds } } },
+                    { $group: { _id: '$questionId', count: { $sum: 1 } } },
+                ]);
+
+                for (const item of counts as Array<{ _id: string; count: number }>) {
+                    if (item?._id) {
+                        messageCountMap.set(item._id, Number(item.count) || 0);
+                    }
+                }
+            }
+
+            const favoriteSet = new Set<string>();
+            if (userId && questionIds.length > 0) {
+                const favoriteDocs = await FavoriteModel.find({
+                    userId,
+                    targetType: 'question',
+                    targetId: { $in: questionIds },
+                })
+                    .select('targetId -_id')
+                    .lean();
+
+                for (const doc of favoriteDocs as Array<{ targetId?: string }>) {
+                    if (doc.targetId) {
+                        favoriteSet.add(doc.targetId);
+                    }
+                }
+            }
+
+            const payload = questions.map((q) => ({
+                ...q,
+                createdAt: new Date(q.createdAt).getTime(),
+                _id: undefined,
+                __v: undefined,
+                updatedAt: undefined,
+                messageCount: messageCountMap.get(q.id) || 0,
+                isFavorited: favoriteSet.has(q.id),
+            }));
+
+            const cacheControl = userId
+                ? 'private, no-store'
+                : 'public, s-maxage=20, stale-while-revalidate=120';
+
+            const etagPayload = JSON.stringify({
+                userId: userId || 'anonymous',
+                action: 'search',
+                query,
+                offset,
+                limit: safeLimit,
+                payload,
+            });
             const etag = computeETag(etagPayload);
             const candidates = parseIfNoneMatch(request.headers.get('if-none-match'));
             const isNotModified = candidates.includes(etag) || candidates.includes('*');
