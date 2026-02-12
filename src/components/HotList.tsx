@@ -1,31 +1,60 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Question } from '@/types/zhihu';
 
-interface HotListProps {
-    questions: (Question & { messageCount?: number })[];
-}
-
-export function HotList({ questions }: HotListProps) {
+export function HotList() {
+    const [questions, setQuestions] = useState<(Question & { messageCount?: number })[]>([]);
     const [offset, setOffset] = useState(0);
-
-    // 按热度排序（点赞 * 2 + 讨论数）
-    const sorted = [...questions]
-        .map((q) => ({
-            ...q,
-            heat: (q.upvotes || 0) * 2 + (q.messageCount || 0),
-        }))
-        .sort((a, b) => b.heat - a.heat);
-
+    const [isLoading, setIsLoading] = useState(false);
     const pageSize = 10;
-    const hotQuestions = sorted.slice(offset, offset + pageSize);
+
+    const loadHotQuestions = useCallback(async (nextOffset: number) => {
+        setIsLoading(true);
+        try {
+            const response = await fetch(`/api/questions?action=hot&limit=${pageSize}&offset=${nextOffset}`);
+            if (!response.ok) return;
+            const data = await response.json();
+            const list = Array.isArray(data) ? data : [];
+
+            if (list.length === 0 && nextOffset > 0) {
+                const resetResponse = await fetch(`/api/questions?action=hot&limit=${pageSize}&offset=0`);
+                if (!resetResponse.ok) return;
+                const resetData = await resetResponse.json();
+                setQuestions(Array.isArray(resetData) ? resetData : []);
+                setOffset(0);
+                return;
+            }
+
+            setQuestions(list);
+            setOffset(nextOffset);
+        } catch (error) {
+            console.error('Failed to load hot questions:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadHotQuestions(0);
+
+        const onUpdated = () => {
+            loadHotQuestions(0);
+        };
+
+        window.addEventListener('agent-zhihu-store-updated', onUpdated);
+        return () => {
+            window.removeEventListener('agent-zhihu-store-updated', onUpdated);
+        };
+    }, [loadHotQuestions]);
+
+    const hotQuestions = questions;
 
     const handleShuffle = () => {
+        if (isLoading) return;
         const nextOffset = offset + pageSize;
-        // 如果超出范围，回到开头
-        setOffset(nextOffset >= sorted.length ? 0 : nextOffset);
+        loadHotQuestions(nextOffset);
     };
 
     return (
@@ -34,9 +63,10 @@ export function HotList({ questions }: HotListProps) {
                 <h3 className="font-semibold text-[var(--zh-text-main)] text-[14px]">大家都在搜</h3>
                 <button
                     onClick={handleShuffle}
+                    disabled={isLoading}
                     className="text-[14px] text-[var(--zh-text-gray)] flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"
                 >
-                    <span className="text-lg">↻</span> 换一换
+                    <span className="text-lg">↻</span> {isLoading ? '加载中...' : '换一换'}
                 </button>
             </div>
             <div className="divide-y divide-[var(--zh-border)]">

@@ -485,7 +485,7 @@ export default function QuestionPage({ params }: PageProps) {
                     {/* Right Column (Sidebar) */}
                     <div className="min-w-0 hidden lg:block">
                         <CreatorCenter questions={hotQuestions} />
-                        <HotList questions={hotQuestions} />
+                        <HotList />
                         <div className="mt-[10px] px-1 text-[14px] text-[var(--zh-text-gray)]">© 2026 Agent 知乎</div>
                     </div>
                 </div>
