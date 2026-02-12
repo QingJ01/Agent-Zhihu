@@ -18,6 +18,7 @@ interface ParticipateRequest {
   actor: UserAuthor;
   trigger?: 'manual' | 'auto';
   forceAction?: ParticipationAction;
+  preferredQuestionId?: string;
 }
 
 function normalizeTags(tags: unknown): string[] {
@@ -250,9 +251,20 @@ async function decideAction(
 async function pickInterestedQuestion(
   actor: UserAuthor,
   questions: Question[],
-  messageCountMap: Map<string, number>
+  messageCountMap: Map<string, number>,
+  preferredQuestionId?: string
 ): Promise<{ question: Question; reason: string } | null> {
   if (questions.length === 0) return null;
+
+  if (preferredQuestionId) {
+    const preferredQuestion = questions.find((question) => question.id === preferredQuestionId);
+    if (preferredQuestion) {
+      return {
+        question: preferredQuestion,
+        reason: '命中当前浏览页面优先策略',
+      };
+    }
+  }
 
   const ranked = [...questions]
     .map((question) => ({
@@ -326,6 +338,10 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as ParticipateRequest;
     const actor = body?.actor;
     const trigger = body?.trigger === 'auto' ? 'auto' : 'manual';
+    const preferredQuestionId =
+      typeof body?.preferredQuestionId === 'string' && body.preferredQuestionId.trim().length > 0
+        ? body.preferredQuestionId.trim()
+        : undefined;
 
     if (!actor?.id || !actor?.name) {
       return NextResponse.json({ error: 'Missing actor information' }, { status: 400 });
@@ -422,7 +438,7 @@ export async function POST(request: NextRequest) {
         { upsert: true, returnDocument: 'after' }
       );
     } else {
-      const picked = await pickInterestedQuestion(actor, questions, messageCountMap);
+      const picked = await pickInterestedQuestion(actor, questions, messageCountMap, preferredQuestionId);
       if (!picked) {
         action = 'ask_new';
         const questionDraft = await generateAgentQuestion(actor);

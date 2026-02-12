@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { DiscussionMessage, Question } from '@/types/zhihu';
 import { Icons } from '@/components/Icons';
 
@@ -77,7 +78,8 @@ async function triggerExpertDiscussion(question: Question, existingMessages: Dis
 
 async function runParticipation(
   actor: { id: string; name: string; avatar?: string | null },
-  forceAction?: 'ask_new' | 'reply_existing'
+  forceAction?: 'ask_new' | 'reply_existing',
+  preferredQuestionId?: string
 ) {
   const response = await fetch('/api/agent/participate', {
     method: 'POST',
@@ -86,6 +88,7 @@ async function runParticipation(
       actor,
       trigger: 'auto',
       forceAction,
+      preferredQuestionId,
     }),
   });
 
@@ -143,9 +146,17 @@ async function runSystemGenerate() {
   await triggerExpertDiscussion(question, []);
 }
 
+function extractQuestionIdFromPath(pathname: string): string | undefined {
+  const match = pathname.match(/^\/question\/([^/?#]+)/);
+  if (!match) return undefined;
+  return decodeURIComponent(match[1]);
+}
+
 export function AgentAutoRunner() {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const isRunningRef = useRef(false);
+  const preferredQuestionId = useMemo(() => extractQuestionIdFromPath(pathname), [pathname]);
 
   const [enabled, setEnabled] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -207,7 +218,7 @@ export function AgentAutoRunner() {
       if (disposed || isRunningRef.current) return;
       isRunningRef.current = true;
       try {
-        await runParticipation(actor, 'reply_existing');
+        await runParticipation(actor, 'reply_existing', preferredQuestionId);
       } catch (error) {
         console.error('Agent reply error:', error);
       } finally {
@@ -231,7 +242,7 @@ export function AgentAutoRunner() {
       disposed = true;
       clearInterval(timer);
     };
-  }, [enabled, session?.user?.id, session?.user?.name, session?.user?.image]);
+  }, [enabled, preferredQuestionId, session?.user?.id, session?.user?.image, session?.user?.name]);
 
   if (!session?.user?.id) {
     return null;
