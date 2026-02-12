@@ -60,6 +60,10 @@ export default function Home() {
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [generatedQuestions, setGeneratedQuestions] = useState<Array<{ title: string; description: string; tags: string[] }>>([]);
+  const [selectedGenIndex, setSelectedGenIndex] = useState<number | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const contentInputRef = useRef<HTMLTextAreaElement | null>(null);
   const quickEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '🎉', '🔥', '✅', '❌', '🙏', '💡'];
@@ -219,7 +223,13 @@ export default function Home() {
       setQuestionFavorites((prev) => ({ ...prev, [question.id]: false }));
       setUserQuestionInput('');
       setUserQuestionTitle('');
+      setGeneratedQuestions([]);
+      setSelectedGenIndex(null);
+      setGenerateError('');
       setActiveTab('new');
+      setTimeout(() => {
+        document.getElementById(`question-${question.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
       setTimeout(() => {
         loadQuestionsFromServer(searchQuery);
       }, 1200);
@@ -229,6 +239,53 @@ export default function Home() {
       setIsSubmittingUserQuestion(false);
     }
   }, [session, userQuestionInput, userQuestionTitle, isSubmittingUserQuestion, loadQuestionsFromServer, searchQuery]);
+
+  const handleGenerateQuestions = useCallback(async () => {
+    if (!session?.user) {
+      window.location.href = '/api/auth/login';
+      return;
+    }
+    if (!userQuestionTitle.trim()) {
+      setGenerateError('请先输入标题关键词');
+      titleInputRef.current?.focus();
+      return;
+    }
+    if (isGenerating) return;
+
+    setIsGenerating(true);
+    setGenerateError('');
+    setSelectedGenIndex(null);
+    try {
+      const res = await fetch('/api/questions/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: userQuestionTitle.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setGenerateError(data.error || '生成失败，请重试');
+        return;
+      }
+      setGeneratedQuestions(data.questions || []);
+    } catch {
+      setGenerateError('网络错误，请稍后重试');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [session, userQuestionTitle, isGenerating]);
+
+  const handleSelectGenQuestion = useCallback((index: number) => {
+    if (selectedGenIndex === index) {
+      setSelectedGenIndex(null);
+      return;
+    }
+    setSelectedGenIndex(index);
+    const q = generatedQuestions[index];
+    if (q) {
+      setUserQuestionTitle(q.title);
+      setUserQuestionInput(q.description);
+    }
+  }, [selectedGenIndex, generatedQuestions]);
 
   const insertIntoQuestionInput = useCallback((text: string) => {
     const input = contentInputRef.current;
@@ -283,7 +340,14 @@ export default function Home() {
                           ref={titleInputRef}
                           type="text"
                           value={userQuestionTitle}
-                          onChange={(e) => setUserQuestionTitle(e.target.value)}
+                          onChange={(e) => {
+                            setUserQuestionTitle(e.target.value);
+                            if (generatedQuestions.length > 0) {
+                              setGeneratedQuestions([]);
+                              setSelectedGenIndex(null);
+                            }
+                            if (generateError) setGenerateError('');
+                          }}
                           placeholder="标题"
                           aria-label="问题标题"
                           className="w-full h-[38px] px-3 bg-transparent font-bold text-[18px] placeholder-gray-400 outline-none border-b border-transparent focus:border-[var(--zh-blue)] transition-colors"
@@ -293,6 +357,61 @@ export default function Home() {
                         </span>
                       </div>
                     </div>
+
+                    {/* Generated Questions */}
+                    {generateError && (
+                      <div className="pl-0 md:pl-[50px] mb-2">
+                        <p className="text-sm text-red-500">{generateError}</p>
+                      </div>
+                    )}
+                    {isGenerating && (
+                      <div className="pl-0 md:pl-[50px] mb-3 space-y-2">
+                        {[0, 1, 2].map((i) => (
+                          <div key={i} className="p-3 rounded-lg border border-gray-100 animate-pulse">
+                            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+                            <div className="h-3 bg-gray-100 rounded w-full" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!isGenerating && generatedQuestions.length > 0 && (
+                      <div className="pl-0 md:pl-[50px] mb-3">
+                        <div className="space-y-2">
+                          {generatedQuestions.map((gq, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => handleSelectGenQuestion(idx)}
+                              className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                                selectedGenIndex === idx
+                                  ? 'border-[var(--zh-blue)] bg-blue-50/50'
+                                  : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50/50'
+                              }`}
+                            >
+                              <p className={`text-sm font-medium ${selectedGenIndex === idx ? 'text-[var(--zh-blue)]' : 'text-[var(--zh-text-main)]'}`}>
+                                {gq.title}
+                              </p>
+                              <p className="text-xs text-[var(--zh-text-gray)] mt-1 line-clamp-2">{gq.description}</p>
+                              {gq.tags?.length > 0 && (
+                                <div className="flex gap-1 mt-1.5">
+                                  {gq.tags.map((tag) => (
+                                    <span key={tag} className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-[var(--zh-text-gray)]">#{tag}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleGenerateQuestions}
+                          disabled={isGenerating}
+                          className="mt-2 text-xs text-[var(--zh-blue)] hover:text-[var(--zh-blue-hover)]"
+                        >
+                          换一批
+                        </button>
+                      </div>
+                    )}
 
                     {/* Thoughts Textarea */}
                     <div className="pl-0 md:pl-[50px]">
@@ -375,8 +494,16 @@ export default function Home() {
                   <div className="flex border-t border-[var(--zh-border)] bg-[#FAFBFC] overflow-x-auto">
                     <button
                       type="button"
+                      onClick={handleGenerateQuestions}
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group"
+                    >
+                      <Icons.Bot className="w-5 h-5" color="#8B5CF6" />
+                      <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">生成问题</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => titleInputRef.current?.focus()}
-                      className="min-w-[25%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.Question className="w-5 h-5" color="#0FB36C" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">提问题</span>
@@ -384,7 +511,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => contentInputRef.current?.focus()}
-                      className="min-w-[25%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.Answer className="w-5 h-5" color="#056DE8" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写回答</span>
@@ -392,7 +519,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => window.alert('写文章功能正在开发中')}
-                      className="min-w-[25%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.Article className="w-5 h-5 text-[#FCC900]" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写文章</span>
@@ -400,7 +527,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => window.alert('发视频功能正在开发中')}
-                      className="min-w-[25%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.VideoPlay className="w-5 h-5 text-[#F96382]" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">发视频</span>
@@ -472,11 +599,11 @@ export default function Home() {
               ) : (
                 <div>
                   {sortedQuestions.map((question: QuestionWithCount) => (
-                    <QuestionCard
-                      key={question.id}
-                      question={question}
-                      currentUserId={session?.user?.id}
-                      isFavorited={!!questionFavorites[question.id]}
+                    <div key={question.id} id={`question-${question.id}`}>
+                      <QuestionCard
+                        question={question}
+                        currentUserId={session?.user?.id}
+                        isFavorited={!!questionFavorites[question.id]}
                       onVoteChange={handleQuestionLikeChange}
                       onFavoriteChange={handleQuestionFavoriteChange}
                       onTagClick={(tag) => {
@@ -487,6 +614,7 @@ export default function Home() {
                         window.history.replaceState({}, '', `${url.pathname}${url.search}`);
                       }}
                     />
+                    </div>
                   ))}
                 </div>
               )}
