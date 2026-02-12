@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { useMemo, useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { Icons } from '@/components/Icons';
 
 interface AppHeaderProps {
@@ -23,6 +23,19 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
   const router = useRouter();
   const pathname = usePathname();
   const [localSearch, setLocalSearch] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [mobileMenuOpen]);
 
   const isControlledSearch = typeof searchValue === 'string' && !!onSearchChange;
   const displayedSearch = isControlledSearch ? searchValue : localSearch;
@@ -69,15 +82,36 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
                 <Icons.Message className="w-5 h-5" />
               </Link>
               {session?.user ? (
-                <Link href="/profile" aria-label="打开个人主页" className="ml-1">
-                  {session.user.image ? (
-                    <img src={session.user.image} alt={`${session.user.name || '用户'}头像`} className="w-7 h-7 rounded-[2px] object-cover" />
-                  ) : (
-                    <div className="w-7 h-7 bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
-                      <Icons.User size={16} />
+                <div className="relative ml-1" ref={mobileMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuOpen(prev => !prev)}
+                    aria-label="用户菜单"
+                  >
+                    {session.user.image ? (
+                      <img src={session.user.image} alt={`${session.user.name || '用户'}头像`} className="w-7 h-7 rounded-[2px] object-cover" />
+                    ) : (
+                      <div className="w-7 h-7 bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
+                        <Icons.User size={16} />
+                      </div>
+                    )}
+                  </button>
+                  {mobileMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                      <Link href="/profile" onClick={() => setMobileMenuOpen(false)} className="block px-3 py-2 text-sm text-[var(--zh-text-main)] hover:bg-gray-50">
+                        个人主页
+                      </Link>
+                      <div className="border-t border-gray-100" />
+                      <button
+                        type="button"
+                        onClick={() => signOut({ callbackUrl: '/' })}
+                        className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-gray-50"
+                      >
+                        退出登录
+                      </button>
                     </div>
                   )}
-                </Link>
+                </div>
               ) : (
                 <button
                   type="button"
@@ -188,15 +222,30 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
                 <Icons.Message className="w-6 h-6" />
               </Link>
               {session?.user ? (
-                <Link href="/profile" aria-label="打开个人主页">
-                  {session.user.image ? (
-                    <img src={session.user.image} alt={`${session.user.name || '用户'}头像`} className="w-[30px] h-[30px] rounded-[2px] object-cover" />
-                  ) : (
-                    <div className="w-[30px] h-[30px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
-                      <Icons.User size={20} />
-                    </div>
-                  )}
-                </Link>
+                <div className="relative group">
+                  <Link href="/profile" aria-label="打开个人主页">
+                    {session.user.image ? (
+                      <img src={session.user.image} alt={`${session.user.name || '用户'}头像`} className="w-[30px] h-[30px] rounded-[2px] object-cover" />
+                    ) : (
+                      <div className="w-[30px] h-[30px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
+                        <Icons.User size={20} />
+                      </div>
+                    )}
+                  </Link>
+                  <div className="invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all duration-150 absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    <Link href="/profile" className="block px-3 py-2 text-sm text-[var(--zh-text-main)] hover:bg-gray-50">
+                      个人主页
+                    </Link>
+                    <div className="border-t border-gray-100" />
+                    <button
+                      type="button"
+                      onClick={() => signOut({ callbackUrl: '/' })}
+                      className="w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-gray-50"
+                    >
+                      退出登录
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <button
                   type="button"
