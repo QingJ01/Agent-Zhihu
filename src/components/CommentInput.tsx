@@ -6,6 +6,7 @@ import { Icons } from '@/components/Icons';
 
 interface CommentInputProps {
     onSubmit: (content: string, replyToId?: string) => Promise<void>;
+    onGenerate?: (replyToId?: string) => Promise<string>;
     disabled?: boolean;
     placeholder?: string;
     submitLabel?: string;
@@ -19,6 +20,7 @@ interface CommentInputProps {
 
 export function CommentInput({
     onSubmit,
+    onGenerate,
     disabled,
     placeholder,
     submitLabel,
@@ -28,6 +30,7 @@ export function CommentInput({
     const { data: session } = useSession();
     const [content, setContent] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const quickEmojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '🎉', '🔥', '✅', '❌', '🙏', '💡'];
@@ -50,15 +53,44 @@ export function CommentInput({
     const handleSubmit = async () => {
         if (!content.trim() || isSubmitting) return;
 
+        const nextContent = content.trim();
+        setContent('');
+        onCancelReply?.();
+
         setIsSubmitting(true);
         try {
-            await onSubmit(content.trim(), replyTarget?.id);
-            setContent('');
-            onCancelReply?.();
+            await onSubmit(nextContent, replyTarget?.id);
         } catch (error) {
             console.error('Submit failed:', error);
+            setContent(nextContent);
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleGenerate = async () => {
+        if (!onGenerate || isGenerating || isSubmitting || disabled) return;
+
+        setIsGenerating(true);
+        try {
+            const generated = await onGenerate(replyTarget?.id);
+            const next = generated.trim();
+            if (next) {
+                setContent(next);
+                setShowEmojiPicker(false);
+                requestAnimationFrame(() => {
+                    const input = textareaRef.current;
+                    if (!input) return;
+                    input.focus();
+                    const cursor = next.length;
+                    input.setSelectionRange(cursor, cursor);
+                });
+            }
+        } catch (error) {
+            console.error('Generate draft failed:', error);
+            window.alert('生成失败，请稍后重试');
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -144,14 +176,24 @@ export function CommentInput({
                             <span><Icons.Image className="w-5 h-5" /></span>
                             <span><Icons.Video className="w-5 h-5" /></span>
                         </div>
-                        <button
-                            type="button"
-                            onClick={handleSubmit}
-                            disabled={!content.trim() || isSubmitting || disabled}
-                            className="px-5 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
-                        >
-                            {isSubmitting ? '发送中...' : (submitLabel || '发布回答')}
-                        </button>
+                        <div className="flex w-full sm:w-auto items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleGenerate}
+                                disabled={!onGenerate || isGenerating || isSubmitting || !!disabled}
+                                className="px-4 py-1.5 border border-[var(--zh-blue)] text-[var(--zh-blue)] rounded-[3px] text-sm font-medium hover:bg-[#EBF5FF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isGenerating ? '生成中...' : (replyTarget ? '生成回复' : '生成回答')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSubmit}
+                                disabled={!content.trim() || isSubmitting || isGenerating || disabled}
+                                className="px-5 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSubmitting ? '发送中...' : (submitLabel || '发布回答')}
+                            </button>
+                        </div>
                     </div>
                     {showEmojiPicker && (
                         <div className="mt-2 inline-flex flex-wrap gap-1 p-2 bg-[var(--zh-bg)] rounded-[6px] border border-[var(--zh-border)]">

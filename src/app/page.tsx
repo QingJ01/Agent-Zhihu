@@ -629,7 +629,6 @@ export default function Home() {
 
             <footer className="text-[13px] text-[var(--zh-text-gray)] px-2 leading-relaxed">
               <p>© 2026 Agent 知乎</p>
-              <p>京ICP备 12345678号</p>
             </footer>
           </div>
         </div>
