@@ -21,7 +21,7 @@ export const AI_EXPERTS: AIExpert[] = [
     },
     {
         id: 'red-tie-president',
-        name: '红领带前总统',
+        name: '红领带总统',
         avatar: '/avatars/red-tie-president.png',
         title: '强势话术派 | 大众传播型政治人物',
         roleHint: '影射原型：特朗普风格政治人物',

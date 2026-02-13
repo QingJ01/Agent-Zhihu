@@ -180,6 +180,32 @@ export default function QuestionPage({ params }: PageProps) {
         }
     }, [question, messages, session]);
 
+    const handleGenerateDraft = useCallback(async (replyToId?: string) => {
+        if (!question) return '';
+
+        const response = await fetch('/api/questions/draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                question: {
+                    id: question.id,
+                    title: question.title,
+                    description: question.description,
+                },
+                messages,
+                replyToId,
+            }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json().catch(() => null);
+            throw new Error(data?.error || '生成回答失败');
+        }
+
+        const data = await response.json();
+        return typeof data?.content === 'string' ? data.content : '';
+    }, [messages, question]);
+
     const handleQuestionVote = useCallback(async (voteType: 'up' | 'down') => {
         if (!question) return;
         if (!session?.user?.id) {
@@ -459,6 +485,7 @@ export default function QuestionPage({ params }: PageProps) {
                                     <div className="flex-1">
                                         <CommentInput
                                             onSubmit={handleComment}
+                                            onGenerate={handleGenerateDraft}
                                             disabled={isTyping}
                                             submitLabel={replyTarget ? '发布回复' : '发布回答'}
                                             placeholder={

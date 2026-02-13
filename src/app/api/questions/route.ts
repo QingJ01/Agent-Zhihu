@@ -746,26 +746,27 @@ export async function POST(request: NextRequest) {
                             const expertId = (targetMsg.author as AIExpert).id;
                             const expert = AI_EXPERTS.find(e => e.id === expertId);
                             if (expert) {
-                                // 强制该专家排在第一位
+                                // 回复 AI 时，只由该专家回复
                                 experts = [expert];
-                                // 再随机选一个配合
-                                const otherExperts = selectExperts(question.tags || [], 5).filter(e => e.id !== expertId);
-                                if (otherExperts.length > 0) {
-                                    experts.push(otherExperts[0]);
-                                }
                             }
                         }
                     }
 
                     // 如果没有指定回复对象，或未找到专家，则按原逻辑选择
                     if (experts.length === 0) {
-                        experts = isUserTriggered
-                            ? getRandomExperts(2, allMessages.filter(m => m.authorType === 'ai').map(m => (m.author as AIExpert).id))
-                            : selectExperts(question.tags || [], 4);
+                        if (isUserTriggered && replyToId) {
+                            experts = getRandomExperts(1, allMessages.filter(m => m.authorType === 'ai').map(m => (m.author as AIExpert).id));
+                        } else {
+                            experts = isUserTriggered
+                                ? getRandomExperts(2, allMessages.filter(m => m.authorType === 'ai').map(m => (m.author as AIExpert).id))
+                                : selectExperts(question.tags || [], 4);
+                        }
                     }
 
                     // 逐个生成回复
-                    const rounds = invitedExpert ? 1 : (isUserTriggered ? 2 : DISCUSSION_ROUNDS);
+                    const rounds = invitedExpert
+                        ? 1
+                        : (isUserTriggered ? (replyToId ? 1 : 2) : DISCUSSION_ROUNDS);
 
                     for (let round = 0; round < rounds; round++) {
                         const expert = experts[round % experts.length];
