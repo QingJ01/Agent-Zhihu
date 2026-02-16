@@ -6,9 +6,11 @@ import { Question, DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { AI_EXPERTS, selectExperts, getRandomExperts } from '@/lib/experts';
 import { connectDB } from '@/lib/mongodb';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { checkRateLimit, getClientIp, rateLimitResponse, validateJsonBodySize } from '@/lib/api-security';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 import FavoriteModel from '@/models/Favorite';
+import { generateId } from '@/lib/id';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -314,7 +316,8 @@ export async function GET(request: NextRequest) {
     try {
         const searchParams = request.nextUrl.searchParams;
         const action = searchParams.get('action');
-        const limit = parseInt(searchParams.get('limit') || '50', 10);
+        const rawLimit = parseInt(searchParams.get('limit') || '50', 10);
+        const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 100);
         const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
 
         // 如果是获取列表，从数据库读取
@@ -611,7 +614,7 @@ export async function GET(request: NextRequest) {
 
         const questionData = await generateQuestion(recentTitles);
         const question: Question = {
-            id: `q-${Date.now()}`,
+            id: generateId('q'),
             title: questionData.title,
             description: questionData.description,
             tags: questionData.tags,
@@ -641,19 +644,36 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
 
     try {
+        const bodySizeError = validateJsonBodySize(request, 32 * 1024);
+        if (bodySizeError) return bodySizeError;
+
+        const session = await getServerSession(authOptions);
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const ip = getClientIp(request);
+        const limiter = checkRateLimit(`questions:post:${session.user.id}:${ip}`, 20, 60 * 1000);
+        if (!limiter.allowed) {
+            return rateLimitResponse(limiter.retryAfter);
+        }
+
         const {
             question,
             messages = [],
             userMessage,
-            userId,
-            userName,
-            userAvatar,
             userMessageId,
             userMessageCreatedAt,
             userMessageAlreadyPersisted,
             replyToId,
             invitedAgentId,
         } = await request.json();
+
+        const sessionAuthor = {
+            id: session.user.id,
+            name: session.user.name || '用户',
+            avatar: session.user.image || '',
+        };
 
         if (!question) {
             return NextResponse.json({ error: 'Missing question' }, { status: 400 });
@@ -687,8 +707,8 @@ export async function POST(request: NextRequest) {
                             title: question.title,
                             description: question.description,
                             tags: question.tags || [],
-                            author: question.author,
-                            createdBy: question.createdBy || 'system',
+                            author: (isUserTriggered ? sessionAuthor : question.author) || null,
+                            createdBy: isUserTriggered ? 'human' : (question.createdBy || 'system'),
                             status: question.status || 'discussing',
                             discussionRounds: question.discussionRounds || 0,
                             upvotes: question.upvotes || 0,
@@ -703,11 +723,11 @@ export async function POST(request: NextRequest) {
                     const allMessages: DiscussionMessage[] = [...messages];
 
                     // 用户评论
-                    if (isUserTriggered && userId) {
+                    if (isUserTriggered) {
                         const userMsg: DiscussionMessage = {
-                            id: userMessageId || `msg-${Date.now()}-user`,
+                            id: userMessageId || generateId('msg-user'),
                             questionId: question.id,
-                            author: { id: userId, name: userName || '用户', avatar: userAvatar },
+                            author: sessionAuthor,
                             authorType: 'user',
                             createdBy: 'human',
                             content: userMessage,
@@ -825,7 +845,7 @@ export async function POST(request: NextRequest) {
 
                         // 创建消息
                         const message: DiscussionMessage = {
-                            id: `msg-${Date.now()}-${round}`,
+                            id: generateId(`msg-ai-${round}`),
                             questionId: question.id,
                             author: expert,
                             authorType: 'ai',

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getServerSession } from 'next-auth';
 import { DiscussionMessage, AIExpert } from '@/types/zhihu';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { checkRateLimit, getClientIp, rateLimitResponse, validateJsonBodySize } from '@/lib/api-security';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -44,6 +47,20 @@ function removeMentions(content: string): string {
 
 export async function POST(request: NextRequest) {
     try {
+        const bodySizeError = validateJsonBodySize(request, 16 * 1024);
+        if (bodySizeError) return bodySizeError;
+
+        const session = await getServerSession(authOptions);
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const ip = getClientIp(request);
+        const limiter = checkRateLimit(`questions:draft:${session.user.id}:${ip}`, 15, 60 * 1000);
+        if (!limiter.allowed) {
+            return rateLimitResponse(limiter.retryAfter);
+        }
+
         const payload = (await request.json()) as DraftPayload;
         const questionTitle = payload.question?.title?.trim();
         if (!questionTitle) {

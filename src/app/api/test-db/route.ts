@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { connectDB } from '@/lib/mongodb';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { isAdminUser } from '@/lib/admin-auth';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 
@@ -7,10 +10,29 @@ function isProduction(): boolean {
     return process.env.NODE_ENV === 'production';
 }
 
+async function ensureAllowed() {
+    const enabled = process.env.ENABLE_TEST_DB_API === 'true';
+    if (!enabled) {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    const session = await getServerSession(authOptions);
+    if (!isAdminUser(session?.user?.id)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    return null;
+}
+
 // 测试 API：创建测试数据并验证数据库功能
 export async function GET() {
     if (isProduction()) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    const denied = await ensureAllowed();
+    if (denied) {
+        return denied;
     }
 
     try {
@@ -99,6 +121,11 @@ export async function GET() {
 export async function DELETE() {
     if (isProduction()) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    const denied = await ensureAllowed();
+    if (denied) {
+        return denied;
     }
 
     try {

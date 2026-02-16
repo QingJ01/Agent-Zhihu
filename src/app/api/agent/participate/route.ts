@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { getServerSession } from 'next-auth';
 import { Question, DiscussionMessage, UserAuthor } from '@/types/zhihu';
 import { connectDB } from '@/lib/mongodb';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { checkRateLimit, getClientIp, rateLimitResponse, validateJsonBodySize } from '@/lib/api-security';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
+import { generateId } from '@/lib/id';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -335,17 +339,31 @@ async function pickInterestedQuestion(
 
 export async function POST(request: NextRequest) {
   try {
+    const bodySizeError = validateJsonBodySize(request, 16 * 1024);
+    if (bodySizeError) return bodySizeError;
+
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const ip = getClientIp(request);
+    const limiter = checkRateLimit(`agent:participate:${session.user.id}:${ip}`, 10, 60 * 1000);
+    if (!limiter.allowed) {
+      return rateLimitResponse(limiter.retryAfter);
+    }
+
     const body = (await request.json()) as ParticipateRequest;
-    const actor = body?.actor;
+    const actor: UserAuthor = {
+      id: session.user.id,
+      name: session.user.name || body?.actor?.name || '用户',
+      avatar: session.user.image || body?.actor?.avatar,
+    };
     const trigger = body?.trigger === 'auto' ? 'auto' : 'manual';
     const preferredQuestionId =
       typeof body?.preferredQuestionId === 'string' && body.preferredQuestionId.trim().length > 0
         ? body.preferredQuestionId.trim()
         : undefined;
-
-    if (!actor?.id || !actor?.name) {
-      return NextResponse.json({ error: 'Missing actor information' }, { status: 400 });
-    }
 
     await connectDB();
 
@@ -399,7 +417,7 @@ export async function POST(request: NextRequest) {
     if (action === 'ask_new') {
       const questionDraft = await generateAgentQuestion(actor);
       newQuestion = {
-        id: `q-${Date.now()}-agent`,
+        id: generateId('q-agent'),
         title: questionDraft.title,
         description: questionDraft.description,
         tags: questionDraft.tags,
@@ -413,7 +431,7 @@ export async function POST(request: NextRequest) {
       };
 
       questionMessage = {
-        id: `msg-${Date.now()}-ask`,
+        id: generateId('msg-agent-ask'),
         questionId: newQuestion.id,
         author: actor,
         authorType: 'user',
@@ -443,7 +461,7 @@ export async function POST(request: NextRequest) {
         action = 'ask_new';
         const questionDraft = await generateAgentQuestion(actor);
         newQuestion = {
-          id: `q-${Date.now()}-agent`,
+          id: generateId('q-agent'),
           title: questionDraft.title,
           description: questionDraft.description,
           tags: questionDraft.tags,
@@ -457,7 +475,7 @@ export async function POST(request: NextRequest) {
         };
 
         questionMessage = {
-          id: `msg-${Date.now()}-ask`,
+          id: generateId('msg-agent-ask'),
           questionId: newQuestion.id,
           author: actor,
           authorType: 'user',
@@ -505,7 +523,7 @@ export async function POST(request: NextRequest) {
         const replyTo = targetMessages.length > 0 ? targetMessages[targetMessages.length - 1].id : undefined;
 
         replyMessage = {
-          id: `msg-${Date.now()}-reply`,
+          id: generateId('msg-agent-reply'),
           questionId: picked.question.id,
           author: actor,
           authorType: 'user',

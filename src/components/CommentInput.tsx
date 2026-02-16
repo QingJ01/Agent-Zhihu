@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Icons } from '@/components/Icons';
+import { openLoginModal } from '@/lib/loginModal';
 
 interface CommentInputProps {
     onSubmit: (content: string, replyToId?: string) => Promise<void>;
@@ -41,7 +42,7 @@ export function CommentInput({
                 <p className="text-[var(--zh-text-gray)] mb-3">登录后参与讨论</p>
                 <button
                     type="button"
-                    onClick={() => { window.location.href = '/api/auth/login'; }}
+                    onClick={openLoginModal}
                     className="inline-block px-4 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] transition-colors"
                 >
                     用 SecondMe 登录

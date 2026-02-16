@@ -16,8 +16,10 @@ export async function GET(request: NextRequest) {
   const userId = session.user.id;
   const { searchParams } = request.nextUrl;
   const type = searchParams.get('type') || 'questions';
-  const page = parseInt(searchParams.get('page') || '1', 10);
-  const limit = parseInt(searchParams.get('limit') || '10', 10);
+  const rawPage = parseInt(searchParams.get('page') || '1', 10);
+  const rawLimit = parseInt(searchParams.get('limit') || '10', 10);
+  const page = Math.min(Math.max(Number.isFinite(rawPage) ? rawPage : 1, 1), 1000);
+  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 10, 1), 50);
   const skip = (page - 1) * limit;
 
   try {

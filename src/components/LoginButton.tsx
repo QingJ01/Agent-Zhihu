@@ -1,7 +1,8 @@
 'use client';
 
-import { useSession, signIn, signOut } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useState } from 'react';
+import { openLoginModal } from '@/lib/loginModal';
 
 export function LoginButton() {
   const { data: session, status } = useSession();
@@ -9,7 +10,8 @@ export function LoginButton() {
 
   const handleLogin = () => {
     setIsLoading(true);
-    window.location.href = '/api/auth/login';
+    openLoginModal();
+    setTimeout(() => setIsLoading(false), 300);
   };
 
   const handleLogout = async () => {
@@ -28,6 +30,12 @@ export function LoginButton() {
   }
 
   if (session?.user) {
+    const providerLabel = session.user.provider === 'github'
+      ? 'GitHub'
+      : session.user.provider === 'google'
+        ? 'Google'
+        : 'SecondMe';
+
     return (
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3">
@@ -40,7 +48,7 @@ export function LoginButton() {
           )}
           <div className="text-left">
             <p className="font-medium text-gray-900">{session.user.name}</p>
-            <p className="text-sm text-gray-500">已连接 SecondMe</p>
+            <p className="text-sm text-gray-500">当前登录：{providerLabel}</p>
           </div>
         </div>
         <button
@@ -59,7 +67,7 @@ export function LoginButton() {
       disabled={isLoading}
       className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {isLoading ? '跳转中...' : '用 SecondMe 登录'}
+      {isLoading ? '跳转中...' : '登录'}
     </button>
   );
 }

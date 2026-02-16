@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { exchangeCodeForTokens, getUserProfile } from '@/lib/secondme';
 import { connectDB } from '@/lib/mongodb';
 import AuthIdentity from '@/models/AuthIdentity';
+import { exchangeGitHubCode, getGitHubProfile } from '@/lib/oauth';
 
-const OAUTH_STATE_COOKIE = 'secondme_oauth_state';
-const OAUTH_ORIGIN_COOKIE = 'secondme_oauth_origin';
-const OAUTH_REDIRECT_URI_COOKIE = 'secondme_oauth_redirect_uri';
+const OAUTH_STATE_COOKIE = 'github_oauth_state';
+const OAUTH_ORIGIN_COOKIE = 'github_oauth_origin';
+const OAUTH_REDIRECT_URI_COOKIE = 'github_oauth_redirect_uri';
 const OAUTH_FLOW_COOKIE = 'oauth_login_flow';
 const OAUTH_BIND_TARGET_COOKIE = 'oauth_bind_target_user_id';
-const AUTH_PAYLOAD_COOKIE = 'secondme_auth_payload';
+const AUTH_PAYLOAD_COOKIE = 'github_auth_payload';
 
 function normalizeBaseUrl(url: string | undefined): string | null {
   if (!url) return null;
@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
   const baseUrl = loginOrigin || request.nextUrl.origin;
 
   if (error) {
-    console.error('OAuth error:', error);
     return NextResponse.redirect(new URL('/?error=oauth_error', baseUrl));
   }
 
@@ -46,8 +45,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeCodeForTokens(code, redirectUri);
-    const profile = await getUserProfile(tokens.access_token);
+    const tokens = await exchangeGitHubCode(code, redirectUri || `${baseUrl}/api/auth/callback/github`);
+    const profile = await getGitHubProfile(tokens.accessToken);
 
     if (flow === 'bind') {
       if (!bindTargetUserId) {
@@ -56,53 +55,51 @@ export async function GET(request: NextRequest) {
 
       await connectDB();
       const existing = await AuthIdentity.findOne({
-        provider: 'secondme',
+        provider: 'github',
         providerAccountId: profile.id,
       })
         .select('canonicalUserId')
         .lean();
 
       if (existing?.canonicalUserId && existing.canonicalUserId !== bindTargetUserId) {
-        return NextResponse.redirect(new URL('/profile?bind=failed&reason=conflict&provider=secondme', baseUrl));
+        return NextResponse.redirect(new URL('/profile?bind=failed&reason=conflict&provider=github', baseUrl));
       }
 
       await AuthIdentity.findOneAndUpdate(
-        { provider: 'secondme', providerAccountId: profile.id },
+        { provider: 'github', providerAccountId: profile.id },
         {
-          provider: 'secondme',
+          provider: 'github',
           providerAccountId: profile.id,
           canonicalUserId: bindTargetUserId,
           email: profile.email,
           name: profile.name,
           avatar: profile.avatar,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          expiresAt: typeof tokens.expires_in === 'number' ? Date.now() + tokens.expires_in * 1000 : undefined,
+          accessToken: tokens.accessToken,
+          expiresAt: tokens.expiresAt,
         },
         { upsert: true, returnDocument: 'after' }
       );
 
-      const bindResponse = NextResponse.redirect(new URL('/profile?bind=success&provider=secondme', baseUrl));
-      bindResponse.cookies.delete(OAUTH_STATE_COOKIE);
-      bindResponse.cookies.delete(OAUTH_ORIGIN_COOKIE);
-      bindResponse.cookies.delete(OAUTH_REDIRECT_URI_COOKIE);
-      bindResponse.cookies.delete(OAUTH_FLOW_COOKIE);
-      bindResponse.cookies.delete(OAUTH_BIND_TARGET_COOKIE);
-      return bindResponse;
+      const response = NextResponse.redirect(new URL('/profile?bind=success&provider=github', baseUrl));
+      response.cookies.delete(OAUTH_STATE_COOKIE);
+      response.cookies.delete(OAUTH_ORIGIN_COOKIE);
+      response.cookies.delete(OAUTH_REDIRECT_URI_COOKIE);
+      response.cookies.delete(OAUTH_FLOW_COOKIE);
+      response.cookies.delete(OAUTH_BIND_TARGET_COOKIE);
+      return response;
     }
 
     const payload = Buffer.from(JSON.stringify({
-      provider: 'secondme',
+      provider: 'github',
       providerAccountId: profile.id,
       profile,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt: typeof tokens.expires_in === 'number' ? Date.now() + tokens.expires_in * 1000 : undefined,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt,
       issuedAt: Date.now(),
     })).toString('base64url');
 
-    const callbackUrl = new URL('/auth/callback/secondme', baseUrl);
-
+    const callbackUrl = new URL('/auth/callback/oauth?provider=github-oauth', baseUrl);
     const response = NextResponse.redirect(callbackUrl);
     response.cookies.delete(OAUTH_STATE_COOKIE);
     response.cookies.delete(OAUTH_ORIGIN_COOKIE);
@@ -120,7 +117,7 @@ export async function GET(request: NextRequest) {
     });
     return response;
   } catch (err) {
-    console.error('OAuth callback error:', err);
+    console.error('GitHub callback error:', err);
     return NextResponse.redirect(new URL('/?error=auth_failed', baseUrl));
   }
 }

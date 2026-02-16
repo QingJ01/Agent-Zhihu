@@ -1,9 +1,13 @@
 import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
+import { getServerSession } from 'next-auth';
 import { SecondMeProfile, DebateMessage, OpponentProfile } from '@/types/secondme';
 import { selectOpponent } from '@/lib/opponents';
 import { connectDB } from '@/lib/mongodb';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { checkRateLimit, getClientIp, rateLimitResponse, validateJsonBodySize } from '@/lib/api-security';
 import DebateModel from '@/models/Debate';
+import { generateId } from '@/lib/id';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -152,7 +156,30 @@ export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
 
   try {
-    const { topic, userProfile } = await request.json();
+    const bodySizeError = validateJsonBodySize(request, 24 * 1024);
+    if (bodySizeError) return bodySizeError;
+
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const ip = getClientIp(request);
+    const limiter = checkRateLimit(`debate:post:${session.user.id}:${ip}`, 8, 60 * 1000);
+    if (!limiter.allowed) {
+      return rateLimitResponse(limiter.retryAfter);
+    }
+
+    const { topic, userProfile: requestUserProfile } = await request.json();
+    const userProfile: SecondMeProfile = {
+      id: session.user.id,
+      name: session.user.name || requestUserProfile?.name || '用户',
+      avatar: session.user.image || requestUserProfile?.avatar,
+      bio: session.user.bio || requestUserProfile?.bio,
+    };
 
     if (!topic || !userProfile) {
       return new Response(
@@ -174,7 +201,7 @@ export async function POST(request: NextRequest) {
         try {
           await connectDB();
 
-          const debateId = `debate-${Date.now()}`;
+          const debateId = generateId('debate');
 
           // 创建辩论记录
           await DebateModel.create({

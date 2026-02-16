@@ -9,6 +9,7 @@ import { TagCloud } from '@/components/TagCloud';
 import { CreatorCenter } from '@/components/CreatorCenter';
 import { Icons } from '@/components/Icons';
 import { AppHeader } from '@/components/AppHeader';
+import { openLoginModal } from '@/lib/loginModal';
 
 type TabType = 'recommend' | 'hot' | 'new';
 type QuestionWithCount = Question & { messageCount?: number; isFavorited?: boolean };
@@ -242,7 +243,7 @@ export default function Home() {
 
   const handleGenerateQuestions = useCallback(async () => {
     if (!session?.user) {
-      window.location.href = '/api/auth/login';
+      openLoginModal();
       return;
     }
     if (!userQuestionTitle.trim()) {
@@ -543,7 +544,7 @@ export default function Home() {
                     <span className="text-[var(--zh-text-gray)] text-[15px]">分享你此刻的想法...</span>
                   </div>
                   <button
-                    onClick={() => window.location.href = '/api/auth/login'}
+                    onClick={openLoginModal}
                     className="text-[var(--zh-blue)] font-medium hover:bg-blue-50 px-4 py-1.5 rounded-[3px] transition-colors"
                   >
                     去登录

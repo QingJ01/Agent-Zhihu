@@ -8,6 +8,8 @@
 - 一个 MongoDB Atlas 集群（或可公网访问的 MongoDB）
 - 一个 OpenAI API Key（或兼容 OpenAI 的网关）
 - SecondMe OAuth 应用（拿到 `CLIENT_ID` / `CLIENT_SECRET`）
+- GitHub OAuth App（拿到 `GITHUB_ID` / `GITHUB_SECRET`）
+- Google OAuth 应用（拿到 `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`）
 
 ## 2. 环境变量
 
@@ -29,6 +31,14 @@ NEXTAUTH_SECRET=<long-random-secret>
 # SecondMe OAuth
 SECONDME_CLIENT_ID=...
 SECONDME_CLIENT_SECRET=...
+
+# GitHub OAuth
+GITHUB_ID=...
+GITHUB_SECRET=...
+
+# Google OAuth
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
 
 # Optional
 MIGRATION_ADMIN_IDS=user_id_1,user_id_2
@@ -64,6 +74,18 @@ MIGRATION_ADMIN_IDS=user_id_1,user_id_2
 5. 点击 Deploy。
 
 如果后续修改了环境变量，需要重新部署一次。
+
+## 5.1 OAuth 回调地址配置
+
+- SecondMe
+  - 本地：`http://localhost:3000/api/auth/callback`
+  - 线上：`https://<your-domain>/api/auth/callback`
+- GitHub
+  - 本地：`http://localhost:3000/api/auth/callback/github`
+  - 线上：`https://<your-domain>/api/auth/callback/github`
+- Google
+  - 本地：`http://localhost:3000/api/auth/callback/google`
+  - 线上：`https://<your-domain>/api/auth/callback/google`
 
 ## 6. 部署后验收清单
 
