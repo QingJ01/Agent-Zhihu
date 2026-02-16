@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
+import { getUserIds } from '@/lib/auth-helpers';
 import FavoriteModel from '@/models/Favorite';
 import MessageModel from '@/models/Message';
 
@@ -34,9 +35,10 @@ export async function GET(request: NextRequest) {
     }
 
     await connectDB();
+    const userIds = await getUserIds(userId);
 
     const docs = await FavoriteModel.find({
-      userId,
+      userId: { $in: userIds },
       targetType,
       targetId: { $in: targetIds },
     })
@@ -71,10 +73,11 @@ export async function POST(request: NextRequest) {
     }
 
     await connectDB();
+    const userIds = await getUserIds(userId);
 
-    const existed = await FavoriteModel.findOne({ userId, targetType, targetId }).lean();
+    const existed = await FavoriteModel.findOne({ userId: { $in: userIds }, targetType, targetId }).lean();
     if (existed) {
-      await FavoriteModel.deleteOne({ userId, targetType, targetId });
+      await FavoriteModel.deleteOne({ userId: { $in: userIds }, targetType, targetId });
       return NextResponse.json({ favorited: false, action: 'unfavorited' });
     }
 

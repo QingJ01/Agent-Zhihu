@@ -150,7 +150,7 @@ export function DebateArena() {
                   userProfile: {
                     id: session.user.id!,
                     name: session.user.name!,
-                    avatar: session.user.image,
+                    avatar: session.user.image ?? undefined,
                     bio: session.user.bio,
                   },
                   opponentProfile,
@@ -327,7 +327,7 @@ export function DebateArena() {
               <div className="max-h-[500px] overflow-y-auto">
                 <ChatList
                   messages={displayMessages}
-                  userAvatar={session.user.image}
+                  userAvatar={session.user.image ?? undefined}
                   isGenerating={isLoading && streamState.currentRole !== null}
                   currentSpeaker={streamState.currentRole || undefined}
                 />

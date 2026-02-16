@@ -7,6 +7,7 @@ declare module 'next-auth' {
       id: string;
       bio?: string;
       accessToken?: string;
+      linkedProviders?: string[];
     } & DefaultSession['user'];
   }
 
@@ -22,5 +23,6 @@ declare module 'next-auth/jwt' {
     id: string;
     bio?: string;
     accessToken?: string;
+    linkedProviders?: string[];
   }
 }

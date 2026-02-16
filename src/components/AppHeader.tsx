@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { Icons } from '@/components/Icons';
+import { LoginModal } from '@/components/LoginModal';
 
 interface AppHeaderProps {
   searchValue?: string;
@@ -24,6 +25,7 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
   const pathname = usePathname();
   const [localSearch, setLocalSearch] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -115,7 +117,7 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
               ) : (
                 <button
                   type="button"
-                  onClick={() => { window.location.href = '/api/auth/login'; }}
+                  onClick={() => setShowLoginModal(true)}
                   className="text-[13px] text-[var(--zh-blue)] hover:text-[var(--zh-blue-hover)] px-1"
                 >
                   登录
@@ -249,7 +251,7 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
               ) : (
                 <button
                   type="button"
-                  onClick={() => { window.location.href = '/api/auth/login'; }}
+                  onClick={() => setShowLoginModal(true)}
                   className="text-[14px] text-[var(--zh-blue)] hover:text-[var(--zh-blue-hover)]"
                 >
                   登录
@@ -259,6 +261,7 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
           </div>
         </div>
       </div>
+      <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
     </header>
   );
 }

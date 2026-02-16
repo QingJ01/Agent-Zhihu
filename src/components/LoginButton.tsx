@@ -1,20 +1,12 @@
 'use client';
 
-import { useSession, signIn, signOut } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useState } from 'react';
+import { LoginModal } from '@/components/LoginModal';
 
 export function LoginButton() {
   const { data: session, status } = useSession();
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleLogin = () => {
-    setIsLoading(true);
-    window.location.href = '/api/auth/login';
-  };
-
-  const handleLogout = async () => {
-    await signOut({ callbackUrl: '/' });
-  };
+  const [showModal, setShowModal] = useState(false);
 
   if (status === 'loading') {
     return (
@@ -28,6 +20,7 @@ export function LoginButton() {
   }
 
   if (session?.user) {
+    const providers = session.user.linkedProviders || [];
     return (
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3">
@@ -40,11 +33,15 @@ export function LoginButton() {
           )}
           <div className="text-left">
             <p className="font-medium text-gray-900">{session.user.name}</p>
-            <p className="text-sm text-gray-500">已连接 SecondMe</p>
+            <p className="text-sm text-gray-500">
+              {providers.length > 0
+                ? `已连接 ${providers.map(p => p === 'github' ? 'GitHub' : p === 'google' ? 'Google' : 'SecondMe').join(', ')}`
+                : '已登录'}
+            </p>
           </div>
         </div>
         <button
-          onClick={handleLogout}
+          onClick={() => signOut({ callbackUrl: '/' })}
           className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
         >
           退出
@@ -54,12 +51,14 @@ export function LoginButton() {
   }
 
   return (
-    <button
-      onClick={handleLogin}
-      disabled={isLoading}
-      className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      {isLoading ? '跳转中...' : '用 SecondMe 登录'}
-    </button>
+    <>
+      <button
+        onClick={() => setShowModal(true)}
+        className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+      >
+        登录
+      </button>
+      <LoginModal isOpen={showModal} onClose={() => setShowModal(false)} />
+    </>
   );
 }

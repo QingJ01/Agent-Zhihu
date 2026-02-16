@@ -5,7 +5,8 @@ import { createHash } from 'crypto';
 import { Question, DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { AI_EXPERTS, selectExperts, getRandomExperts } from '@/lib/experts';
 import { connectDB } from '@/lib/mongodb';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getUserIds } from '@/lib/auth-helpers';
+import { authOptions } from '@/lib/auth';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 import FavoriteModel from '@/models/Favorite';
@@ -321,6 +322,7 @@ export async function GET(request: NextRequest) {
         if (action === 'list') {
             const session = await getServerSession(authOptions);
             const userId = session?.user?.id;
+            const userIds = userId ? await getUserIds(userId) : [];
 
             await connectDB();
             const questions = await QuestionModel.find()
@@ -345,9 +347,9 @@ export async function GET(request: NextRequest) {
             }
 
             const favoriteSet = new Set<string>();
-            if (userId && questionIds.length > 0) {
+            if (userIds.length > 0 && questionIds.length > 0) {
                 const favoriteDocs = await FavoriteModel.find({
-                    userId,
+                    userId: { $in: userIds },
                     targetType: 'question',
                     targetId: { $in: questionIds },
                 })
@@ -438,10 +440,11 @@ export async function GET(request: NextRequest) {
 
             const questionIds = (hotDocs as Array<{ id: string }>).map((q) => q.id).filter(Boolean);
             const favoriteSet = new Set<string>();
+            const userIds = userId ? await getUserIds(userId) : [];
 
-            if (userId && questionIds.length > 0) {
+            if (userIds.length > 0 && questionIds.length > 0) {
                 const favoriteDocs = await FavoriteModel.find({
-                    userId,
+                    userId: { $in: userIds },
                     targetType: 'question',
                     targetId: { $in: questionIds },
                 })
@@ -538,9 +541,10 @@ export async function GET(request: NextRequest) {
             }
 
             const favoriteSet = new Set<string>();
-            if (userId && questionIds.length > 0) {
+            const userIds = userId ? await getUserIds(userId) : [];
+            if (userIds.length > 0 && questionIds.length > 0) {
                 const favoriteDocs = await FavoriteModel.find({
-                    userId,
+                    userId: { $in: userIds },
                     targetType: 'question',
                     targetId: { $in: questionIds },
                 })

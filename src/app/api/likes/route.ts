@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
+import { getUserIds } from '@/lib/auth-helpers';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 
@@ -14,17 +15,22 @@ function safeCount(value: unknown): number {
 
 function applyVoteToggle(
     doc: { upvotes?: number; downvotes?: number; likedBy?: string[]; dislikedBy?: string[] },
-    userId: string,
+    userIds: string[],
     voteType: VoteType
 ) {
+    const primaryId = userIds[0];
     const upvotes = safeCount(doc.upvotes);
     const downvotes = safeCount(doc.downvotes);
     const likedBy = new Set(doc.likedBy || []);
     const dislikedBy = new Set(doc.dislikedBy || []);
 
+    const hasLiked = userIds.some(id => likedBy.has(id));
+    const hasDisliked = userIds.some(id => dislikedBy.has(id));
+    const removeFrom = (set: Set<string>) => userIds.forEach(id => set.delete(id));
+
     if (voteType === 'up') {
-        if (likedBy.has(userId)) {
-            likedBy.delete(userId);
+        if (hasLiked) {
+            removeFrom(likedBy);
             return {
                 action: 'unliked',
                 upvotes: Math.max(0, upvotes - 1),
@@ -35,11 +41,11 @@ function applyVoteToggle(
         }
 
         let nextDownvotes = downvotes;
-        if (dislikedBy.has(userId)) {
-            dislikedBy.delete(userId);
+        if (hasDisliked) {
+            removeFrom(dislikedBy);
             nextDownvotes = Math.max(0, downvotes - 1);
         }
-        likedBy.add(userId);
+        likedBy.add(primaryId);
 
         return {
             action: 'liked',
@@ -50,8 +56,8 @@ function applyVoteToggle(
         };
     }
 
-    if (dislikedBy.has(userId)) {
-        dislikedBy.delete(userId);
+    if (hasDisliked) {
+        removeFrom(dislikedBy);
         return {
             action: 'undownvoted',
             upvotes,
@@ -62,11 +68,11 @@ function applyVoteToggle(
     }
 
     let nextUpvotes = upvotes;
-    if (likedBy.has(userId)) {
-        likedBy.delete(userId);
+    if (hasLiked) {
+        removeFrom(likedBy);
         nextUpvotes = Math.max(0, upvotes - 1);
     }
-    dislikedBy.add(userId);
+    dislikedBy.add(primaryId);
 
     return {
         action: 'downvoted',
@@ -101,12 +107,13 @@ export async function POST(request: NextRequest) {
         }
 
         await connectDB();
+        const userIds = await getUserIds(visitorId);
 
         if (targetType === 'question') {
             const doc = await QuestionModel.findOne({ id: targetId });
             if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-            const next = applyVoteToggle(doc, visitorId, voteType);
+            const next = applyVoteToggle(doc, userIds, voteType);
             await QuestionModel.updateOne(
                 { id: targetId },
                 {
@@ -130,7 +137,7 @@ export async function POST(request: NextRequest) {
             const doc = await MessageModel.findOne({ id: targetId });
             if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-            const next = applyVoteToggle(doc, visitorId, voteType);
+            const next = applyVoteToggle(doc, userIds, voteType);
             await MessageModel.updateOne(
                 { id: targetId },
                 {
