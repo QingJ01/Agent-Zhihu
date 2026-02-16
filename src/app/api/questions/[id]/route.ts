@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
+import { getUserIds } from '@/lib/auth-helpers';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 import FavoriteModel from '@/models/Favorite';
@@ -33,9 +34,10 @@ export async function GET(
 
         const favoriteSet = new Set<string>();
         let questionFavorited = false;
-        if (userId) {
+        const userIds = userId ? await getUserIds(userId) : [];
+        if (userIds.length > 0) {
             const favoriteDocs = await FavoriteModel.find({
-                userId,
+                userId: { $in: userIds },
                 $or: [
                     { targetType: 'question', targetId: id },
                     ...(messageIds.length > 0

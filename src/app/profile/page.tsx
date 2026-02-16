@@ -1,9 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { AppHeader } from '@/components/AppHeader';
+
+interface LinkedAccount {
+  provider: string;
+  linkedAt: string;
+  profileData?: { name?: string; email?: string; image?: string };
+}
+
+interface ApiTokenInfo {
+  name: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
 
 interface ProfileStats {
   questions: number;
@@ -74,6 +86,32 @@ export default function ProfilePage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
+  const [apiTokens, setApiTokens] = useState<ApiTokenInfo[]>([]);
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [tokenName, setTokenName] = useState('');
+  const [generatingToken, setGeneratingToken] = useState(false);
+
+  const fetchLinkedAccounts = useCallback(() => {
+    fetch('/api/auth/link')
+      .then(res => res.json())
+      .then(data => setLinkedAccounts(data.accounts || []))
+      .catch(console.error);
+  }, []);
+
+  const fetchApiTokens = useCallback(() => {
+    fetch('/api/auth/token')
+      .then(res => res.json())
+      .then(data => setApiTokens(data.tokens || []))
+      .catch(console.error);
+  }, []);
+
+  // Fetch linked accounts & tokens
+  useEffect(() => {
+    if (!session?.user) return;
+    fetchLinkedAccounts();
+    fetchApiTokens();
+  }, [session, fetchLinkedAccounts, fetchApiTokens]);
 
   // Fetch stats
   useEffect(() => {
@@ -170,9 +208,13 @@ export default function ProfilePage() {
               <h2 className="text-xl font-bold text-[#121212]">{user.name}</h2>
               {user.bio && <p className="text-[14px] md:text-[15px] text-[#646464] mt-1 break-words">{user.bio}</p>}
               {user.email && <p className="text-sm text-[#8590A6] mt-0.5">{user.email}</p>}
-              <span className="inline-flex items-center mt-2 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-600">
-                已连接 SecondMe
-              </span>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {(session.user.linkedProviders || []).map(p => (
+                  <span key={p} className="inline-flex items-center px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-600">
+                    已连接 {p === 'github' ? 'GitHub' : p === 'google' ? 'Google' : 'SecondMe'}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -219,6 +261,153 @@ export default function ProfilePage() {
             )}
           </div>
         )}
+
+        {/* Account Binding */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5">
+          <h3 className="text-sm font-medium text-gray-800 mb-3">账号绑定</h3>
+          <div className="space-y-2">
+            {(['github', 'google', 'secondme'] as const).map(provider => {
+              const linked = linkedAccounts.find(a => a.provider === provider);
+              const displayName = provider === 'github' ? 'GitHub' : provider === 'google' ? 'Google' : 'SecondMe';
+              return (
+                <div key={provider} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-[#121212]">{displayName}</span>
+                    {linked && (
+                      <span className="text-xs text-green-600">已绑定</span>
+                    )}
+                  </div>
+                  {linked ? (
+                    <button
+                      onClick={async () => {
+                        if (linkedAccounts.length <= 1) {
+                          alert('至少保留一个登录方式');
+                          return;
+                        }
+                        if (!confirm(`确定解绑 ${displayName}？`)) return;
+                        await fetch('/api/auth/link', {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ provider }),
+                        });
+                        fetchLinkedAccounts();
+                      }}
+                      className="text-xs text-red-500 hover:text-red-600"
+                    >
+                      解绑
+                    </button>
+                  ) : (
+                    <a
+                      href={`/api/auth/link/${provider}`}
+                      className="text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      绑定
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* API Token Management */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5">
+          <h3 className="text-sm font-medium text-gray-800 mb-1">API Token</h3>
+          <p className="text-xs text-[#8590A6] mb-3">用于 OpenClaw 或其他 API 接入</p>
+
+          {/* Generate new token */}
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              placeholder="Token 名称（可选）"
+              value={tokenName}
+              onChange={e => setTokenName(e.target.value)}
+              className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400"
+            />
+            <button
+              onClick={async () => {
+                setGeneratingToken(true);
+                try {
+                  const res = await fetch('/api/auth/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: tokenName || 'Default' }),
+                  });
+                  const data = await res.json();
+                  if (data.token) {
+                    setNewToken(data.token);
+                    setTokenName('');
+                    fetchApiTokens();
+                  }
+                } catch (e) {
+                  console.error(e);
+                } finally {
+                  setGeneratingToken(false);
+                }
+              }}
+              disabled={generatingToken}
+              className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {generatingToken ? '生成中...' : '生成 Token'}
+            </button>
+          </div>
+
+          {/* Show newly generated token */}
+          {newToken && (
+            <div className="mb-3 p-3 rounded-lg bg-green-50 border border-green-200">
+              <p className="text-xs text-green-700 mb-1">Token 已生成，请妥善保存（不会再次显示）：</p>
+              <code className="block text-xs bg-white px-2 py-1.5 rounded border border-green-200 break-all select-all">
+                {newToken}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(newToken);
+                  setNewToken(null);
+                }}
+                className="mt-2 text-xs text-green-600 hover:text-green-700"
+              >
+                复制并关闭
+              </button>
+            </div>
+          )}
+
+          {/* Existing tokens */}
+          {apiTokens.length > 0 ? (
+            <div className="space-y-2">
+              {apiTokens.map((t, i) => (
+                <div key={i} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50">
+                  <div>
+                    <span className="text-sm font-medium text-[#121212]">{t.name}</span>
+                    <span className="text-xs text-[#8590A6] ml-2">
+                      创建于 {new Date(t.createdAt).toLocaleDateString('zh-CN')}
+                    </span>
+                    {t.lastUsedAt && (
+                      <span className="text-xs text-[#8590A6] ml-2">
+                        最近使用 {new Date(t.lastUsedAt).toLocaleDateString('zh-CN')}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`确定撤销 Token "${t.name}"？`)) return;
+                      await fetch('/api/auth/token', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: t.name }),
+                      });
+                      fetchApiTokens();
+                    }}
+                    className="text-xs text-red-500 hover:text-red-600"
+                  >
+                    撤销
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[#8590A6]">暂无 Token</p>
+          )}
+        </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

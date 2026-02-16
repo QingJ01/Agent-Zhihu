@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
+import { getUserIds } from '@/lib/auth-helpers';
 import DebateModel from '@/models/Debate';
 
 // GET: 获取用户的辩论历史
@@ -14,7 +15,8 @@ export async function GET() {
         }
 
         await connectDB();
-        const debates = await DebateModel.find({ userId })
+        const userIds = await getUserIds(userId);
+        const debates = await DebateModel.find({ userId: { $in: userIds } })
             .sort({ createdAt: -1 })
             .limit(20)
             .lean();

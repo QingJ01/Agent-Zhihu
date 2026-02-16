@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/mongodb';
+import { getUserIds } from '@/lib/auth-helpers';
 import Question from '@/models/Question';
 import Message from '@/models/Message';
 import Debate from '@/models/Debate';
@@ -22,22 +23,23 @@ export async function GET(request: NextRequest) {
 
   try {
     await connectDB();
+    const userIds = await getUserIds(userId);
 
     if (type === 'questions') {
       const [items, total] = await Promise.all([
-        Question.find({ 'author.id': userId })
+        Question.find({ 'author.id': { $in: userIds } })
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
           .lean(),
-        Question.countDocuments({ 'author.id': userId }),
+        Question.countDocuments({ 'author.id': { $in: userIds } }),
       ]);
       return NextResponse.json({ items, total, hasMore: skip + items.length < total });
     }
 
     if (type === 'answers') {
       const items = await Message.aggregate([
-        { $match: { 'author.id': userId, authorType: 'user' } },
+        { $match: { 'author.id': { $in: userIds }, authorType: 'user' } },
         { $sort: { createdAt: -1 } },
         { $skip: skip },
         { $limit: limit },
@@ -58,18 +60,18 @@ export async function GET(request: NextRequest) {
           },
         },
       ]);
-      const total = await Message.countDocuments({ 'author.id': userId, authorType: 'user' });
+      const total = await Message.countDocuments({ 'author.id': { $in: userIds }, authorType: 'user' });
       return NextResponse.json({ items, total, hasMore: skip + items.length < total });
     }
 
     if (type === 'debates') {
       const [items, total] = await Promise.all([
-        Debate.find({ userId })
+        Debate.find({ userId: { $in: userIds } })
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
           .lean(),
-        Debate.countDocuments({ userId }),
+        Debate.countDocuments({ userId: { $in: userIds } }),
       ]);
       return NextResponse.json({ items, total, hasMore: skip + items.length < total });
     }
@@ -77,13 +79,13 @@ export async function GET(request: NextRequest) {
     if (type === 'likes') {
       // 用户点赞过的问题和回答，合并后按时间排序
       const [likedQuestions, likedMessages] = await Promise.all([
-        Question.find({ likedBy: userId })
+        Question.find({ likedBy: { $in: userIds } })
           .sort({ createdAt: -1 })
           .limit(50)
           .select('id title description upvotes createdAt')
           .lean(),
         Message.aggregate([
-          { $match: { likedBy: userId } },
+          { $match: { likedBy: { $in: userIds } } },
           { $sort: { createdAt: -1 } },
           { $limit: 50 },
           {
@@ -118,12 +120,12 @@ export async function GET(request: NextRequest) {
 
     if (type === 'favorites') {
       const [favoriteQuestions, favoriteMessages] = await Promise.all([
-        Favorite.find({ userId, targetType: 'question' })
+        Favorite.find({ userId: { $in: userIds }, targetType: 'question' })
           .sort({ createdAt: -1 })
           .limit(100)
           .select('targetId createdAt')
           .lean(),
-        Favorite.find({ userId, targetType: 'message' })
+        Favorite.find({ userId: { $in: userIds }, targetType: 'message' })
           .sort({ createdAt: -1 })
           .limit(100)
           .select('targetId questionId createdAt')
