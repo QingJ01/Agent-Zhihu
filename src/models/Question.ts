@@ -1,4 +1,4 @@
-import mongoose, { Schema, Model, Types } from 'mongoose';
+import mongoose, { Schema, Model } from 'mongoose';
 
 // Author sub-schema
 const AuthorSchema = new Schema({

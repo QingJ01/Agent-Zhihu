@@ -2,6 +2,7 @@
 
 import { DebateMessage } from '@/types/secondme';
 import { useEffect, useRef } from 'react';
+import Image from 'next/image';
 
 interface ChatBubbleProps {
   message: DebateMessage;
@@ -22,7 +23,14 @@ export function ChatBubble({ message, isUser, avatar, isTyping }: ChatBubbleProp
           }`}
         >
           {avatar ? (
-            <img src={avatar} alt={message.name} className="w-full h-full rounded-full object-cover" />
+            <Image
+              src={avatar}
+              alt={message.name}
+              width={48}
+              height={48}
+              className="w-full h-full rounded-full object-cover"
+              unoptimized
+            />
           ) : (
             message.name.charAt(0)
           )}

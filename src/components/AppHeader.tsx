@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { useMemo, useState, useRef, useEffect } from 'react';
@@ -112,7 +113,14 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
                     aria-label="用户菜单"
                   >
                     {session.user.image ? (
-                      <img src={session.user.image} alt={`${session.user.name || '用户'}头像`} className="w-7 h-7 rounded-[2px] object-cover" />
+                      <Image
+                        src={session.user.image}
+                        alt={`${session.user.name || '用户'}头像`}
+                        width={28}
+                        height={28}
+                        className="w-7 h-7 rounded-[2px] object-cover"
+                        unoptimized
+                      />
                     ) : (
                       <div className="w-7 h-7 bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
                         <Icons.User size={16} />
@@ -248,7 +256,14 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
                 <div className="relative group">
                   <Link href="/profile" aria-label="打开个人主页">
                     {session.user.image ? (
-                      <img src={session.user.image} alt={`${session.user.name || '用户'}头像`} className="w-[30px] h-[30px] rounded-[2px] object-cover" />
+                      <Image
+                        src={session.user.image}
+                        alt={`${session.user.name || '用户'}头像`}
+                        width={30}
+                        height={30}
+                        className="w-[30px] h-[30px] rounded-[2px] object-cover"
+                        unoptimized
+                      />
                     ) : (
                       <div className="w-[30px] h-[30px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
                         <Icons.User size={20} />
@@ -310,7 +325,7 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
                 {
                   key: 'secondme' as const,
                   label: 'SecondMe 登录',
-                  icon: <img src="https://second-me.cn/default_logo.svg" width="24" height="24" alt="SecondMe" />
+                  icon: <Image src="https://second-me.cn/default_logo.svg" width={24} height={24} alt="SecondMe" unoptimized />
                 },
                 {
                   key: 'github' as const,

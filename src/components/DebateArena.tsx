@@ -17,7 +17,6 @@ interface StreamState {
 export function DebateArena() {
   const { data: session } = useSession();
   const [topic, setTopic] = useState('');
-  const [debate, setDebate] = useState<DebateSession | null>(null);
   const [messages, setMessages] = useState<DebateMessage[]>([]);
   const [synthesis, setSynthesis] = useState<DebateSynthesis | null>(null);
   const [opponent, setOpponent] = useState<OpponentProfile | null>(null);
@@ -159,7 +158,6 @@ export function DebateArena() {
                   status: 'completed',
                   createdAt: Date.now(),
                 };
-                setDebate(completedDebate);
                 saveDebate(completedDebate);
               }
             } catch {
@@ -179,7 +177,6 @@ export function DebateArena() {
   }, [topic, session, saveDebate]);
 
   const loadHistoryDebate = useCallback((historicalDebate: DebateSession) => {
-    setDebate(historicalDebate);
     setMessages(historicalDebate.messages);
     setSynthesis(historicalDebate.synthesis || null);
     setOpponent(historicalDebate.opponentProfile);
