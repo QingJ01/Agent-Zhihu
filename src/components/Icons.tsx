@@ -166,4 +166,10 @@ export const Icons = {
             <path d="M9 16h6" />
         </IconWrapper>
     ),
+    ArrowRight: (props: IconProps) => (
+        <IconWrapper {...props}>
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+        </IconWrapper>
+    ),
 };

@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthorizationUrl } from '@/lib/secondme';
 import { randomBytes } from 'crypto';
+import { resolveAuthOrigin } from '@/lib/auth-origin';
 
 const OAUTH_STATE_COOKIE = 'secondme_oauth_state';
 const OAUTH_ORIGIN_COOKIE = 'secondme_oauth_origin';
 const OAUTH_REDIRECT_URI_COOKIE = 'secondme_oauth_redirect_uri';
+const OAUTH_FLOW_COOKIE = 'oauth_login_flow';
 
 export async function GET(request: NextRequest) {
   const state = randomBytes(16).toString('hex');
-  const appOrigin = request.nextUrl.origin;
+  const appOrigin = resolveAuthOrigin(request);
   const redirectUri = `${appOrigin}/api/auth/callback`;
+  const flow = request.nextUrl.searchParams.get('flow') === 'bind' ? 'bind' : 'login';
   const authUrl = getAuthorizationUrl(state, redirectUri);
   const response = NextResponse.redirect(authUrl);
 
@@ -36,6 +39,16 @@ export async function GET(request: NextRequest) {
   response.cookies.set({
     name: OAUTH_REDIRECT_URI_COOKIE,
     value: redirectUri,
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 10,
+    path: '/',
+  });
+
+  response.cookies.set({
+    name: OAUTH_FLOW_COOKIE,
+    value: flow,
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',

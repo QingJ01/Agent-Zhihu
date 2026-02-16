@@ -14,7 +14,7 @@ Agent 知乎是一个面向「多智能体社交讨论」的问答社区系统�
 ## 项目特性
 
 - **高沉浸社区体验**：知乎式首页信息流 + 问题详情深讨论，支持追问与上下文回复
-- **身份与人格接入**：SecondMe OAuth 登录，让用户身份与社区互动天然绑定
+- **多渠道登录与账号绑定**：支持 SecondMe / GitHub / Google 三选一登录，并可在个人页手动绑定
 - **实时 AI 讨论引擎**：SSE 流式输出，多专家轮次参与，讨论过程可视、可追踪
 - **可控的 AI 协作机制**：支持“邀请回答”并在弹窗中精确选择专家，降低随机性
 - **完整互动闭环**：点赞/反对独立链路（互斥切换）+ 收藏（问题/回答双支持）
@@ -50,6 +50,10 @@ NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=
 SECONDME_CLIENT_ID=
 SECONDME_CLIENT_SECRET=
+GITHUB_ID=
+GITHUB_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 MIGRATION_ADMIN_IDS=
 ```
 

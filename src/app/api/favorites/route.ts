@@ -72,9 +72,8 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
-    const existed = await FavoriteModel.findOne({ userId, targetType, targetId }).lean();
-    if (existed) {
-      await FavoriteModel.deleteOne({ userId, targetType, targetId });
+    const deleted = await FavoriteModel.deleteOne({ userId, targetType, targetId });
+    if (deleted.deletedCount && deleted.deletedCount > 0) {
       return NextResponse.json({ favorited: false, action: 'unfavorited' });
     }
 
@@ -87,9 +86,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Target not found' }, { status: 404 });
     }
 
-    await FavoriteModel.create({ userId, targetType, targetId, questionId });
-
-    return NextResponse.json({ favorited: true, action: 'favorited' });
+    try {
+      await FavoriteModel.create({ userId, targetType, targetId, questionId });
+      return NextResponse.json({ favorited: true, action: 'favorited' });
+    } catch (createError: unknown) {
+      const err = createError as { code?: number };
+      if (err?.code === 11000) {
+        return NextResponse.json({ favorited: true, action: 'favorited' });
+      }
+      throw createError;
+    }
   } catch (error) {
     console.error('Favorites toggle error:', error);
     return NextResponse.json({ error: 'Favorite failed' }, { status: 500 });

@@ -51,7 +51,10 @@ export async function GET(request: NextRequest) {
     await connectDB();
 
     const [questionEventsRaw, messageEventsRaw] = await Promise.all([
-      QuestionModel.find({ createdBy: { $in: ['human', 'agent'] } })
+      QuestionModel.find({
+        createdBy: { $in: ['human', 'agent'] },
+        'author.id': session.user.id,
+      })
         .sort({ createdAt: -1 })
         .limit(limit)
         .select('id title description createdBy createdAt -_id')
@@ -61,6 +64,7 @@ export async function GET(request: NextRequest) {
           $match: {
             authorType: 'user',
             createdBy: { $in: ['human', 'agent'] },
+            'author.id': session.user.id,
           },
         },
         { $sort: { createdAt: -1 } },

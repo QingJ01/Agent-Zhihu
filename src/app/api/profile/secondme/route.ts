@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { connectDB } from '@/lib/mongodb';
+import AuthIdentity from '@/models/AuthIdentity';
 import { getUserShades, getUserSoftMemory } from '@/lib/secondme';
 
 export async function GET() {
@@ -9,7 +11,20 @@ export async function GET() {
     return NextResponse.json({ error: '未登录' }, { status: 401 });
   }
 
-  const accessToken = session.user.accessToken;
+  let accessToken: string | undefined;
+  try {
+    await connectDB();
+    const secondMeIdentity = await AuthIdentity.findOne({
+      canonicalUserId: session.user.id,
+      provider: 'secondme',
+    })
+      .select('accessToken -_id')
+      .lean();
+    accessToken = secondMeIdentity?.accessToken;
+  } catch (error) {
+    console.error('Failed to load SecondMe identity:', error);
+  }
+
   if (!accessToken) {
     return NextResponse.json({ shades: [], softMemory: null });
   }
