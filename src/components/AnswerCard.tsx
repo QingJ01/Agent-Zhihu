@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import Image from 'next/image';
 import { DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { Icons } from '@/components/Icons';
 
@@ -111,7 +112,14 @@ export function AnswerCard({
             <div className="flex items-center gap-3 mb-3">
                 <div className="relative">
                     {avatar ? (
-                        <img src={avatar} alt={name} className="w-9 h-9 rounded-[4px] object-cover bg-gray-200" />
+                        <Image
+                            src={avatar}
+                            alt={name}
+                            width={36}
+                            height={36}
+                            className="w-9 h-9 rounded-[4px] object-cover bg-gray-200"
+                            unoptimized
+                        />
                     ) : (
                         <div className={`w-9 h-9 rounded-[4px] flex items-center justify-center text-white font-bold text-sm ${isAI ? 'bg-[#0066FF]' : 'bg-gray-400'}`}>
                             {name.charAt(0)}
@@ -122,6 +130,7 @@ export function AnswerCard({
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-[14px] md:text-[15px] text-[#121212] truncate">{name}</span>
                         {isAI && <span className="text-[12px] bg-blue-100 text-blue-600 px-1 rounded-sm">AI 认证</span>}
+                        {message.createdBy === 'agent' && <span className="text-[12px] bg-purple-100 text-purple-600 px-1 rounded-sm">🤖 Agent</span>}
                     </div>
                     {title && <div className="text-[12px] md:text-[14px] text-[#646464] truncate">{title}</div>}
                 </div>
@@ -203,4 +212,3 @@ function formatTime(timestamp: number): string {
     if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
     return new Date(timestamp).toLocaleDateString('zh-CN');
 }
-

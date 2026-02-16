@@ -8,7 +8,6 @@ interface TagCloudProps {
 export function TagCloud({ tags, onTagClick }: TagCloudProps) {
     // 按频率排序
     const sortedTags = [...tags].sort((a, b) => b.count - a.count).slice(0, 20);
-    const maxCount = Math.max(...sortedTags.map((t) => t.count), 1);
 
     return (
         <div className="bg-white rounded-[2px] shadow-sm overflow-hidden border border-[var(--zh-border)]">

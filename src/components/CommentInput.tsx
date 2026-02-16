@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import Image from 'next/image';
 import { Icons } from '@/components/Icons';
 import { openLoginModal } from '@/lib/loginModal';
 
@@ -119,10 +120,13 @@ export function CommentInput({
             <div className="flex items-start gap-3">
                 <div className="hidden sm:flex w-[38px] h-[38px] rounded-[2px] overflow-hidden bg-[var(--zh-bg)] items-center justify-center text-gray-400 flex-shrink-0">
                     {session.user.image ? (
-                        <img
+                        <Image
                             src={session.user.image}
                             alt={session.user.name || 'User'}
+                            width={38}
+                            height={38}
                             className="w-full h-full object-cover"
+                            unoptimized
                         />
                     ) : (
                         <Icons.User size={20} />

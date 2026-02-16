@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import Image from 'next/image';
 import { Question } from '@/types/zhihu';
 import { QuestionCard } from '@/components/QuestionCard';
 import { HotList } from '@/components/HotList';
@@ -334,7 +335,16 @@ export default function Home() {
                     {/* Title Input Row */}
                     <div className="flex items-center gap-2 md:gap-3 mb-3">
                       <div className="w-[38px] h-[38px] rounded-[2px] overflow-hidden bg-[var(--zh-bg)] flex-shrink-0">
-                        {session.user.image && <img src={session.user.image} alt={`${session.user.name || '用户'}头像`} className="w-full h-full object-cover" />}
+                        {session.user.image && (
+                          <Image
+                            src={session.user.image}
+                            alt={`${session.user.name || '用户'}头像`}
+                            width={38}
+                            height={38}
+                            className="w-full h-full object-cover"
+                            unoptimized
+                          />
+                        )}
                       </div>
                       <div className="flex-1 relative">
                         <input

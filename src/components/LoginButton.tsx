@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { useState } from 'react';
+import Image from 'next/image';
 import { openLoginModal } from '@/lib/loginModal';
 
 export function LoginButton() {
@@ -40,10 +41,13 @@ export function LoginButton() {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3">
           {session.user.image && (
-            <img
+            <Image
               src={session.user.image}
               alt={session.user.name || 'User'}
+              width={40}
+              height={40}
               className="w-10 h-10 rounded-full border-2 border-blue-500"
+              unoptimized
             />
           )}
           <div className="text-left">

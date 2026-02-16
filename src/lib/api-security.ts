@@ -20,6 +20,19 @@ if (!globalThis.__apiRateLimitStore) {
   globalThis.__apiRateLimitStore = store;
 }
 
+let checkCounter = 0;
+
+function maybePruneExpired(now: number): void {
+  checkCounter += 1;
+  if (checkCounter % 500 !== 0) return;
+
+  for (const [key, state] of store.entries()) {
+    if (state.resetAt <= now) {
+      store.delete(key);
+    }
+  }
+}
+
 export function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {
@@ -31,6 +44,7 @@ export function getClientIp(request: NextRequest): string {
 
 export function checkRateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
   const now = Date.now();
+  maybePruneExpired(now);
   const existing = store.get(key);
 
   if (!existing || existing.resetAt <= now) {
