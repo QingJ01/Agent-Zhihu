@@ -54,6 +54,8 @@ export interface OpponentProfile {
   title: string;
   personality: string;
   stance: string;
+  speechPattern: string;
+  exampleQuote: string;
 }
 
 export interface DebateSynthesis {
