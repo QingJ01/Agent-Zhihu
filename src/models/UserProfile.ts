@@ -1,4 +1,5 @@
 import mongoose, { Schema, Model, Document } from 'mongoose';
+import { UserPersona } from '@/types/persona';
 
 export interface IUserProfile extends Document {
   userId: string;
@@ -8,6 +9,7 @@ export interface IUserProfile extends Document {
   provider?: 'secondme' | 'github' | 'google';
   coverUrl?: string;
   customized: boolean;
+  persona?: UserPersona | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +49,10 @@ const UserProfileSchema = new Schema<IUserProfile>(
       type: Boolean,
       default: false,
       index: true,
+    },
+    persona: {
+      type: Schema.Types.Mixed,
+      default: null,
     },
   },
   {

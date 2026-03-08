@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { checkRateLimit, getClientIp, rateLimitResponse, validateJsonBodySize } from '@/lib/api-security';
+import { fetchUserPersona, buildPersonaSnippet } from '@/lib/persona';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -67,6 +68,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: '缺少问题标题' }, { status: 400 });
         }
 
+        const persona = await fetchUserPersona(session.user.id);
+        const personaSnippet = buildPersonaSnippet(persona);
+
         const messages = Array.isArray(payload.messages) ? payload.messages : [];
         const replyTarget = payload.replyToId
             ? messages.find((message) => message.id === payload.replyToId) || null
@@ -111,7 +115,7 @@ export async function POST(request: NextRequest) {
             : `你要生成”直接回答问题”的草稿，不要写成对某人的回帖。`;
 
         const systemPrompt = `你是知乎用户的写作助手。${modeInstruction}
-
+${personaSnippet ? `${personaSnippet}\n\n当上述用户个性画像存在时，你的草稿应体现该用户的说话方式和论证习惯。\n` : ''}
 ## 写作铁律
 
 1. 第一句话必须有明确观点或态度，禁止用”关于这个问题”、”我觉得”、”首先”开头
