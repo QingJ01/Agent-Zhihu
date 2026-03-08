@@ -129,8 +129,8 @@ export async function POST(request: NextRequest) {
     await connectDB();
     await UserProfile.findOneAndUpdate(
       { userId: session.user.id },
-      { persona },
-      { upsert: false }
+      { $set: { persona }, userId: session.user.id },
+      { upsert: true }
     );
 
     return NextResponse.json({ ok: true, persona });
