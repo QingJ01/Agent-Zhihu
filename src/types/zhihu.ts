@@ -24,6 +24,8 @@ export interface AIExpert {
     title: string;
     roleHint?: string;
     personality: string;
+    speechPattern: string;
+    exampleQuote: string;
     expertise: string[];
 }
 
