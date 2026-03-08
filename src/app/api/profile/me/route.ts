@@ -23,7 +23,7 @@ export async function GET() {
   try {
     await connectDB();
     const profile = await UserProfile.findOne({ userId: session.user.id })
-      .select('userId displayName avatarUrl bio provider coverUrl customized updatedAt -_id')
+      .select('userId displayName avatarUrl bio provider coverUrl customized persona updatedAt -_id')
       .lean();
 
     return NextResponse.json({
@@ -34,6 +34,7 @@ export async function GET() {
       provider: profile?.provider || session.user.provider || null,
       coverUrl: profile?.coverUrl || '',
       customized: !!profile?.customized,
+      persona: (profile as Record<string, unknown> | null)?.persona || null,
       updatedAt: profile?.updatedAt || null,
     });
   } catch (error) {

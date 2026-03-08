@@ -11,6 +11,7 @@ import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 import FavoriteModel from '@/models/Favorite';
 import { generateId } from '@/lib/id';
+import { fetchUserPersona, buildPersonaSnippet } from '@/lib/persona';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -299,7 +300,8 @@ async function generateExpertResponse(
     question: { title: string; description?: string },
     messages: DiscussionMessage[],
     replyTarget: DiscussionMessage | null,
-    isReplyToUser: boolean = false
+    isReplyToUser: boolean = false,
+    userPersonaSnippet?: string,
 ): Promise<{ content: string; shouldLike: string[] }> {
     const targetAuthorName = replyTarget
         ? replyTarget.authorType === 'ai'
@@ -359,7 +361,7 @@ ${expert.speechPattern}
 3. 100-200字。如果一句话能说清楚就用一句话，不要为了凑字数注水
 4. 像在知乎写回答，不像在写论文。可以用反问、类比、自嘲
 5. ${replyTarget ? `直接回应 ${targetAuthorName} 的观点，可以赞同、补充或反驳，但必须给出一个 ta 没提到的新角度` : '对问题发表你的看法'}
-${isReplyToUser ? '6. 对方是真人用户，态度友好但观点要有启发性' : ''}
+${isReplyToUser ? `6. 对方是真人用户，态度友好但观点要有启发性${userPersonaSnippet ? `\n\n## 关于你回复的这位用户\n${userPersonaSnippet}` : ''}` : ''}
 
 ## 回复别人时的规则
 
@@ -788,6 +790,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing question' }, { status: 400 });
         }
 
+        const persona = await fetchUserPersona(session.user.id);
+        const userPersonaSnippet = buildPersonaSnippet(persona);
+
         const isUserTriggered = !!userMessage;
         const isInviteTriggered = typeof invitedAgentId === 'string' && invitedAgentId.trim().length > 0;
         const invitedExpert = isInviteTriggered
@@ -928,7 +933,8 @@ export async function POST(request: NextRequest) {
                             question,
                             allMessages,
                             target,
-                            isUserTriggered && round === 0
+                            isUserTriggered && round === 0,
+                            userPersonaSnippet || undefined,
                         );
 
                         // 处理 AI 点赞

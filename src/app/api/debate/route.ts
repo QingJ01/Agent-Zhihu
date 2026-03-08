@@ -8,6 +8,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { checkRateLimit, getClientIp, rateLimitResponse, validateJsonBodySize } from '@/lib/api-security';
 import DebateModel from '@/models/Debate';
 import { generateId } from '@/lib/id';
+import { fetchUserPersona, buildPersonaSnippet } from '@/lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -43,7 +44,7 @@ function pickStrategy<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function buildUserAgentPrompt(profile: SecondMeProfile, topic: string): string {
+function buildUserAgentPrompt(profile: SecondMeProfile, topic: string, personaSnippet?: string): string {
   const traits = profile.softMemory?.traits?.join('、') || '理性、客观';
   const bio = profile.bio || '一个热爱思考的人';
 
@@ -54,6 +55,7 @@ function buildUserAgentPrompt(profile: SecondMeProfile, topic: string): string {
 - 简介：${bio}
 - 性格特点：${traits}
 - 说话习惯：自然口语化，偏短句
+${personaSnippet || ''}
 
 ## 辩论策略（这是高质量辩论的核心）
 
@@ -250,8 +252,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const persona = await fetchUserPersona(session.user.id);
+    const personaSnippet = buildPersonaSnippet(persona);
+
     const opponent = selectOpponent(topic);
-    const userPrompt = buildUserAgentPrompt(userProfile, topic);
+    const userPrompt = buildUserAgentPrompt(userProfile, topic, personaSnippet);
     const opponentPrompt = buildOpponentPrompt(opponent, topic);
 
     const stream = new ReadableStream({

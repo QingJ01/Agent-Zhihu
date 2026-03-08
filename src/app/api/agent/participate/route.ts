@@ -8,6 +8,7 @@ import { checkRateLimit, getClientIp, rateLimitResponse, validateJsonBodySize } 
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
 import { generateId } from '@/lib/id';
+import { fetchUserPersona, buildPersonaSnippet } from '@/lib/persona';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -131,7 +132,7 @@ function pickOne<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-async function generateAgentQuestion(actor: UserAuthor): Promise<{ title: string; description: string; tags: string[] }> {
+async function generateAgentQuestion(actor: UserAuthor, personaSnippet?: string): Promise<{ title: string; description: string; tags: string[] }> {
   const templateKey = pickOne(AGENT_TEMPLATE_KEYS);
   const topicSeed = pickOne(AGENT_TOPIC_SEEDS);
 
@@ -141,6 +142,7 @@ async function generateAgentQuestion(actor: UserAuthor): Promise<{ title: string
       {
         role: 'system',
         content: `你是用户的AI分身，在知乎风格社区发起讨论。
+${personaSnippet || ''}
 
 ## 好问题的标准
 
@@ -220,7 +222,8 @@ E. 征集体验型 F. 冷门切角型 G. 对比疑问型 H. "明明"句式型
 async function generateAgentReply(
   actor: UserAuthor,
   targetQuestion: Question,
-  targetMessages: DiscussionMessage[]
+  targetMessages: DiscussionMessage[],
+  personaSnippet?: string,
 ): Promise<string> {
   const context = targetMessages
     .slice(-5)
@@ -239,6 +242,7 @@ async function generateAgentReply(
       {
         role: 'system',
         content: `你是用户 ${actor.name} 的AI分身，在问答社区进行高质量回复。
+${personaSnippet || ''}
 
 ## 回复铁律
 
@@ -490,6 +494,9 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
 
+    const persona = await fetchUserPersona(session.user.id);
+    const personaSnippet = buildPersonaSnippet(persona);
+
     const questionDocs = await QuestionModel.find()
       .sort({ createdAt: -1 })
       .limit(50)
@@ -538,7 +545,7 @@ export async function POST(request: NextRequest) {
     let reason = '';
 
     if (action === 'ask_new') {
-      const questionDraft = await generateAgentQuestion(actor);
+      const questionDraft = await generateAgentQuestion(actor, personaSnippet);
       newQuestion = {
         id: generateId('q-agent'),
         title: questionDraft.title,
@@ -582,7 +589,7 @@ export async function POST(request: NextRequest) {
       const picked = await pickInterestedQuestion(actor, questions, messageCountMap, preferredQuestionId);
       if (!picked) {
         action = 'ask_new';
-        const questionDraft = await generateAgentQuestion(actor);
+        const questionDraft = await generateAgentQuestion(actor, personaSnippet);
         newQuestion = {
           id: generateId('q-agent'),
           title: questionDraft.title,
@@ -642,7 +649,7 @@ export async function POST(request: NextRequest) {
           createdAt: Date | number;
         }>).map(toMessage);
 
-        const replyContent = await generateAgentReply(actor, picked.question, targetMessages);
+        const replyContent = await generateAgentReply(actor, picked.question, targetMessages, personaSnippet);
         const replyTo = targetMessages.length > 0 ? targetMessages[targetMessages.length - 1].id : undefined;
 
         replyMessage = {
