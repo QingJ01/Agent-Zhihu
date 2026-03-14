@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(limiter.retryAfter);
     }
 
-    const { topic, userProfile: requestUserProfile } = await request.json();
+    const { topic, opponentId, userProfile: requestUserProfile } = await request.json();
     const userProfile: SecondMeProfile = {
       id: session.user.id,
       name: session.user.name || requestUserProfile?.name || '用户',
@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
     const persona = await fetchUserPersona(session.user.id);
     const personaSnippet = buildPersonaSnippet(persona);
 
-    const opponent = selectOpponent(topic);
+    const opponent = selectOpponent(topic, opponentId);
     const userPrompt = buildUserAgentPrompt(userProfile, topic, personaSnippet);
     const opponentPrompt = buildOpponentPrompt(opponent, topic);
 
