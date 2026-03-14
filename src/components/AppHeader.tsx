@@ -17,6 +17,7 @@ type LoginProvider = 'secondme' | 'github' | 'google';
 
 const NAV_ITEMS = [
   { href: '/', label: '首页' },
+  { href: '/debate', label: '辩论' },
   { href: '/logs', label: '日志' },
   { href: '/profile', label: '个人主页' },
 ];
@@ -99,6 +100,9 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
               >
                 提问
               </button>
+              <Link href="/debate" className="p-2 hover:text-[#8590A6]" aria-label="辩论">
+                <Icons.Swords className="w-5 h-5" />
+              </Link>
               <Link href="/logs" className="p-2 hover:text-[#8590A6]" aria-label="查看日志">
                 <Icons.Bell className="w-5 h-5" />
               </Link>
@@ -246,6 +250,9 @@ export function AppHeader({ searchValue, onSearchChange, onAskClick }: AppHeader
             </button>
 
             <div className="flex items-center gap-6 text-[#999]">
+              <Link href="/debate" className="hover:text-[#8590A6]" aria-label="辩论">
+                <Icons.Swords className="w-6 h-6" />
+              </Link>
               <Link href="/logs" className="hover:text-[#8590A6]" aria-label="查看日志">
                 <Icons.Bell className="w-6 h-6" />
               </Link>

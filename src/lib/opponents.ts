@@ -53,19 +53,28 @@ export const OPPONENT_PROFILES: OpponentProfile[] = [
   },
 ];
 
-export function selectOpponent(topic: string): OpponentProfile {
+export function selectOpponent(topic: string, opponentId?: string): OpponentProfile {
+  if (opponentId) {
+    const selected = OPPONENT_PROFILES.find((p) => p.id === opponentId);
+    if (selected) return selected;
+  }
+
   const topicLower = topic.toLowerCase();
 
-  if (topicLower.includes('ai') || topicLower.includes('人工智能') || topicLower.includes('deepseek') || topicLower.includes('openai') || topicLower.includes('gpt')) {
+  if (topicLower.includes('ai') || topicLower.includes('人工智能') || topicLower.includes('deepseek') || topicLower.includes('openai') || topicLower.includes('gpt') || topicLower.includes('模型') || topicLower.includes('大模型') || topicLower.includes('agent')) {
     return Math.random() > 0.5 ? OPPONENT_PROFILES[0] : OPPONENT_PROFILES[1];
   }
 
-  if (topicLower.includes('伦理') || topicLower.includes('道德') || topicLower.includes('意义') || topicLower.includes('人生')) {
+  if (topicLower.includes('伦理') || topicLower.includes('道德') || topicLower.includes('意义') || topicLower.includes('人生') || topicLower.includes('哲学') || topicLower.includes('自由') || topicLower.includes('公平')) {
     return OPPONENT_PROFILES[2];
   }
 
-  if (topicLower.includes('产品') || topicLower.includes('商业') || topicLower.includes('创业') || topicLower.includes('市场')) {
+  if (topicLower.includes('产品') || topicLower.includes('商业') || topicLower.includes('创业') || topicLower.includes('市场') || topicLower.includes('融资') || topicLower.includes('用户') || topicLower.includes('增长')) {
     return OPPONENT_PROFILES[3];
+  }
+
+  if (topicLower.includes('996') || topicLower.includes('内卷') || topicLower.includes('躺平') || topicLower.includes('房价') || topicLower.includes('学历') || topicLower.includes('考研')) {
+    return OPPONENT_PROFILES[4];
   }
 
   return OPPONENT_PROFILES[Math.floor(Math.random() * OPPONENT_PROFILES.length)];
