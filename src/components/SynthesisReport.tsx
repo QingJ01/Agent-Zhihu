@@ -10,7 +10,7 @@ interface SynthesisReportProps {
 
 export function SynthesisReport({ synthesis, userName, opponentName }: SynthesisReportProps) {
   const winnerName = synthesis.winner === 'user' ? userName : synthesis.winner === 'opponent' ? opponentName : '平局';
-  const winnerColor = synthesis.winner === 'user' ? 'text-[var(--zh-blue)]' : synthesis.winner === 'opponent' ? 'text-orange-600' : 'text-[var(--zh-text-gray)]';
+  const winnerColor = synthesis.winner === 'user' ? 'text-[var(--zh-blue)]' : synthesis.winner === 'opponent' ? 'text-[var(--zh-orange)]' : 'text-[var(--zh-text-gray)]';
 
   return (
     <div className="space-y-[-1px]">
@@ -35,7 +35,7 @@ export function SynthesisReport({ synthesis, userName, opponentName }: Synthesis
           <ul className="space-y-1.5">
             {synthesis.consensus.map((item, idx) => (
               <li key={idx} className="text-[14px] text-[var(--zh-text-secondary)] flex items-start gap-2">
-                <span className="text-green-500 mt-0.5 flex-shrink-0">·</span>
+                <span className="text-[var(--zh-green)] mt-0.5 flex-shrink-0">·</span>
                 <span>{item}</span>
               </li>
             ))}
@@ -49,7 +49,7 @@ export function SynthesisReport({ synthesis, userName, opponentName }: Synthesis
         <ul className="space-y-1.5">
           {synthesis.disagreements.map((item, idx) => (
             <li key={idx} className="text-[14px] text-[var(--zh-text-secondary)] flex items-start gap-2">
-              <span className="text-red-400 mt-0.5 flex-shrink-0">·</span>
+              <span className="text-[var(--zh-red)] mt-0.5 flex-shrink-0">·</span>
               <span>{item}</span>
             </li>
           ))}

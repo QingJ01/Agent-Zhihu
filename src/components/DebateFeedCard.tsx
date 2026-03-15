@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from './Icons';
+import { openLoginModal } from '@/lib/loginModal';
 
 export interface DebateFeedItem {
   id: string;
@@ -44,14 +45,14 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
     debate.winner === 'user'
       ? 'text-[var(--zh-blue)]'
       : debate.winner === 'opponent'
-        ? 'text-orange-600'
+        ? 'text-[var(--zh-orange)]'
         : 'text-[var(--zh-text-gray)]';
 
   const handleVoteClick = useCallback(async (e: React.MouseEvent, voteType: 'up' | 'down') => {
     e.preventDefault();
     e.stopPropagation();
     if (!currentUserId || isVoting) {
-      if (!currentUserId) window.alert('请先登录后再操作');
+      if (!currentUserId) { openLoginModal(); }
       return;
     }
 
@@ -86,7 +87,7 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
     <div className="p-4 md:p-[20px] bg-white border-b border-[var(--zh-border)] last:border-b-0 hover:shadow-[0_1px_3px_rgba(18,18,18,0.1)] transition-shadow">
       {/* Type badge */}
       <div className="flex items-center gap-2 mb-2">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-[2px] bg-orange-50 text-orange-600 border border-orange-100">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-[2px] bg-[var(--zh-orange-light)] text-[var(--zh-orange)] border border-[var(--zh-orange-border)]">
           <Icons.Swords size={12} />
           辩论
         </span>
@@ -124,14 +125,14 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
           <button
             onClick={(e) => handleVoteClick(e, 'up')}
             disabled={isVoting}
-            className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium transition-colors bg-[rgba(0,102,255,0.1)] text-[var(--zh-blue)] hover:bg-[rgba(0,102,255,0.15)]"
+            className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium transition-colors bg-[var(--zh-blue-tint)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
           >
             <Icons.Upvote size={12} filled={debate.liked} />
             <span>{`赞同 ${debate.upvotes || ''}`}</span>
           </button>
           <button
             onClick={(e) => handleVoteClick(e, 'down')}
-            className="px-2 py-1.5 text-xs md:text-sm font-medium transition-colors ml-[2px] bg-[rgba(0,102,255,0.1)] text-[var(--zh-blue)] hover:bg-[rgba(0,102,255,0.15)]"
+            className="px-2 py-1.5 text-xs md:text-sm font-medium transition-colors ml-[2px] bg-[var(--zh-blue-tint)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
             title={`反对 ${debate.downvotes || 0}`}
           >
             <Icons.Downvote size={12} filled={debate.downvoted} />
@@ -140,7 +141,7 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
 
         {/* Round count */}
         <Link href={`/debate?id=${debate.id}`} className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors p-0">
-          <Icons.Comment size={18} className="text-[#8590A6]" />
+          <Icons.Comment size={18} className="text-[var(--zh-text-gray)]" />
           <span>{debate.roundCount} 回合</span>
         </Link>
 
@@ -164,7 +165,7 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
           }}
           className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
         >
-          <Icons.Share size={18} className="text-[#8590A6]" />
+          <Icons.Share size={18} className="text-[var(--zh-text-gray)]" />
           <span>分享</span>
         </button>
       </div>

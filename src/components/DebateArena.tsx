@@ -7,6 +7,7 @@ import { SynthesisReport } from './SynthesisReport';
 import { DebateHistory } from './DebateHistory';
 import { useDebateHistory } from '@/lib/useDebateHistory';
 import { OPPONENT_PROFILES } from '@/lib/opponents';
+import { openLoginModal } from '@/lib/loginModal';
 import Image from 'next/image';
 
 export type DebateMode = 'agent-vs-agent' | 'agent-vs-user-agent' | 'agent-vs-user';
@@ -67,7 +68,8 @@ export function DebateArena() {
   }, []);
 
   const startDebate = useCallback(async () => {
-    if (!topic.trim() || !session?.user) return;
+    if (!topic.trim()) return;
+    if (!session?.user) { openLoginModal(); return; }
 
     setMessages([]);
     setSynthesis(null);
@@ -208,21 +210,13 @@ export function DebateArena() {
     setIsSynthesizing(false);
   }, []);
 
-  if (!session?.user) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-[var(--zh-text-gray)]">请先登录以开始辩论</p>
-      </div>
-    );
-  }
-
   const isLoading = streamState.isStreaming;
   const displayMessages = streamState.currentRole && streamState.currentContent
     ? [
       ...messages,
       {
         role: streamState.currentRole,
-        name: streamState.currentRole === 'user' ? session.user.name! : opponent?.name || '对手',
+        name: streamState.currentRole === 'user' ? (session?.user?.name || '我') : opponent?.name || '对手',
         content: streamState.currentContent,
         timestamp: Date.now(),
       },
@@ -279,7 +273,7 @@ export function DebateArena() {
             {isLoading ? (
               <button
                 onClick={cancelDebate}
-                className="px-4 py-2 bg-[#F1605D] text-white rounded text-[14px] font-medium hover:bg-[#E04E4B] transition-colors"
+                className="px-4 py-2 bg-[var(--zh-red)] text-white rounded text-[14px] font-medium hover:bg-red-700 transition-colors"
               >
                 停止辩论
               </button>
@@ -302,7 +296,7 @@ export function DebateArena() {
                   key={t}
                   onClick={() => setTopic(t)}
                   disabled={isLoading}
-                  className="px-2.5 py-1 text-[13px] text-[var(--zh-text-gray)] bg-[var(--zh-bg)] rounded hover:bg-gray-200 hover:text-[var(--zh-text-main)] transition-colors disabled:cursor-not-allowed"
+                  className="px-2.5 py-1 text-[13px] text-[var(--zh-text-gray)] bg-[var(--zh-bg)] rounded hover:bg-[var(--zh-border)] hover:text-[var(--zh-text-main)] transition-colors disabled:cursor-not-allowed"
                 >
                   {t}
                 </button>
@@ -322,8 +316,8 @@ export function DebateArena() {
                   onClick={() => setSelectedOpponentId(selectedOpponentId === op.id ? null : op.id)}
                   className={`flex items-center gap-3 p-3 rounded text-left transition-all border ${
                     selectedOpponentId === op.id
-                      ? 'border-[var(--zh-blue)] bg-blue-50'
-                      : 'border-[var(--zh-border)] hover:border-gray-300 hover:bg-[var(--zh-bg)]'
+                      ? 'border-[var(--zh-blue)] bg-[var(--zh-blue-light)]'
+                      : 'border-[var(--zh-border)] hover:border-[var(--zh-text-gray)] hover:bg-[var(--zh-bg)]'
                   }`}
                 >
                   <div className="w-9 h-9 rounded-full bg-[var(--zh-bg)] flex items-center justify-center text-[14px] font-bold text-[var(--zh-text-secondary)] flex-shrink-0">
@@ -363,14 +357,14 @@ export function DebateArena() {
                   </span>
                   <span>vs</span>
                   <span className="flex items-center gap-1.5">
-                    {session.user.image ? (
+                    {session?.user?.image ? (
                       <Image src={session.user.image} alt="" width={20} height={20} className="w-5 h-5 rounded-full object-cover" unoptimized />
                     ) : (
                       <span className="w-5 h-5 rounded-full bg-[var(--zh-bg)] flex items-center justify-center text-[10px] font-bold">
-                        {(session.user.name || '我').charAt(0)}
+                        {(session?.user?.name || '我').charAt(0)}
                       </span>
                     )}
-                    {mode === 'agent-vs-user' ? session.user.name : `${session.user.name} 的 Agent`}
+                    {mode === 'agent-vs-user' ? (session?.user?.name || '我') : `${session?.user?.name || '我'} 的 Agent`}
                   </span>
                 </div>
                 {isLoading && (
@@ -440,7 +434,7 @@ export function DebateArena() {
                     key={idx}
                     message={msg}
                     isUser={msg.role === 'user'}
-                    userAvatar={session.user.image}
+                    userAvatar={session?.user?.image}
                     opponentName={opponent.name}
                     roundIndex={Math.floor(idx / 2) + 1}
                   />
@@ -449,7 +443,7 @@ export function DebateArena() {
                   <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
                     <div className="flex items-center gap-2 text-[var(--zh-text-gray)] text-[14px]">
                       <span className="animate-spin rounded-full h-3.5 w-3.5 border border-[var(--zh-text-gray)] border-t-transparent" />
-                      {streamState.currentRole === 'user' ? (mode === 'agent-vs-user' ? session.user.name : `${session.user.name} 的 Agent`) : opponent.name} 正在发言...
+                      {streamState.currentRole === 'user' ? (mode === 'agent-vs-user' ? (session?.user?.name || '我') : `${session?.user?.name || '我'} 的 Agent`) : opponent.name} 正在发言...
                     </div>
                   </div>
                 )}
@@ -458,7 +452,7 @@ export function DebateArena() {
               synthesis && (
                 <SynthesisReport
                   synthesis={synthesis}
-                  userName={session.user.name || '我的Agent'}
+                  userName={session?.user?.name || '我的Agent'}
                   opponentName={opponent.name}
                 />
               )
@@ -556,7 +550,7 @@ function DebateAnswerCard({
       {/* Author header */}
       <div className="px-4 pt-3 pb-2 flex items-center gap-2.5">
         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0 ${
-          isUser ? 'bg-blue-50 text-[var(--zh-blue)]' : 'bg-orange-50 text-orange-600'
+          isUser ? 'bg-[var(--zh-blue-light)] text-[var(--zh-blue)]' : 'bg-[var(--zh-orange-light)] text-[var(--zh-orange)]'
         }`}>
           {isUser && userAvatar ? (
             <Image src={userAvatar} alt="" width={32} height={32} className="w-full h-full rounded-full object-cover" unoptimized />
@@ -567,7 +561,7 @@ function DebateAnswerCard({
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[14px] font-medium text-[var(--zh-text-main)]">{message.name}</span>
           <span className={`px-1.5 py-0.5 text-[11px] rounded ${
-            isUser ? 'bg-blue-50 text-[var(--zh-blue)]' : 'bg-orange-50 text-orange-600'
+            isUser ? 'bg-[var(--zh-blue-light)] text-[var(--zh-blue)]' : 'bg-[var(--zh-orange-light)] text-[var(--zh-orange)]'
           }`}>
             {isUser ? '正方' : '反方'}
           </span>
