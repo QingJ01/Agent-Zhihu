@@ -56,13 +56,13 @@ export const Icons = {
 
     // Actions (Vote, Comment, Share, etc.)
     Upvote: ({ filled, ...props }: IconProps) => (
-        <IconWrapper {...props}>
-            <path d="m18 15-6-6-6 6" fill={filled ? "currentColor" : "none"} />
+        <IconWrapper {...props} stroke="none">
+            <path d="M12 4L3 15h18L12 4z" fill="currentColor" opacity={filled ? 1 : 0.55} />
         </IconWrapper>
     ),
     Downvote: ({ filled, ...props }: IconProps) => (
-        <IconWrapper {...props}>
-            <path d="m6 9 6 6 6-6" fill={filled ? "currentColor" : "none"} />
+        <IconWrapper {...props} stroke="none">
+            <path d="M12 20L3 9h18L12 20z" fill="currentColor" opacity={filled ? 1 : 0.55} />
         </IconWrapper>
     ),
     Comment: (props: IconProps) => (
