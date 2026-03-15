@@ -131,21 +131,21 @@ export function QuestionCard({
             {/* Footer / Actions */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
                 {/* Split Vote Button */}
-                <div className="flex items-center rounded-[3px] overflow-hidden">
+                <div className="flex items-center">
                     <button
                         onClick={(e) => handleVoteClick(e, 'up')}
                         disabled={isVoting}
-                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium transition-colors bg-[var(--zh-blue-tint)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
+                        className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-l-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                     >
-                        <Icons.Upvote size={12} filled={liked} />
-                        <span>{`赞同 ${voteCount}`}</span>
+                        <Icons.Upvote size={10} filled={liked} />
+                        <span>赞同{voteCount ? ` ${voteCount}` : ''}</span>
                     </button>
                     <button
                         onClick={(e) => handleVoteClick(e, 'down')}
-                        className="px-2 py-1.5 text-xs md:text-sm font-medium transition-colors ml-[2px] bg-[var(--zh-blue-tint)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
+                        className="flex items-center px-2.5 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-r-[3px] border-l border-white/60 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                         title={`反对 ${downvoteCount}`}
                     >
-                        <Icons.Downvote size={12} filled={downvoted} />
+                        <Icons.Downvote size={10} filled={downvoted} />
                     </button>
                 </div>
 

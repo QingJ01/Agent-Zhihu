@@ -658,22 +658,22 @@ export default function ProfilePage() {
                             </div>
                           )}
                           <div className="mt-2.5 flex items-center gap-4">
-                            <div className="flex items-center rounded-[3px] overflow-hidden">
+                            <div className="flex items-center">
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'up')}
-                                className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors rounded-l-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                               >
-                                <Icons.Upvote size={11} filled={!!item.liked} />
-                                <span>{item.upvotes || '赞同'}</span>
+                                <Icons.Upvote size={10} filled={!!item.liked} />
+                                <span>赞同{item.upvotes ? ` ${item.upvotes}` : ''}</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'down')}
-                                className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
+                                className="flex items-center px-2.5 py-1.5 text-sm font-medium transition-colors rounded-r-[3px] border-l border-white/60 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                                 title={`反对 ${item.downvotes || 0}`}
                               >
-                                <Icons.Downvote size={11} filled={!!item.downvoted} />
+                                <Icons.Downvote size={10} filled={!!item.downvoted} />
                               </button>
                             </div>
                             <span className="text-[var(--zh-text-gray)] text-sm flex items-center gap-1.5">
@@ -705,22 +705,22 @@ export default function ProfilePage() {
                             </div>
                           )}
                           <div className="mt-2.5 flex items-center gap-4">
-                            <div className="flex items-center rounded-[3px] overflow-hidden">
+                            <div className="flex items-center">
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'up')}
-                                className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors rounded-l-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                               >
-                                <Icons.Upvote size={11} filled />
-                                <span>{item.upvotes || '赞同'}</span>
+                                <Icons.Upvote size={10} filled />
+                                <span>赞同{item.upvotes ? ` ${item.upvotes}` : ''}</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'down')}
-                                className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
+                                className="flex items-center px-2.5 py-1.5 text-sm font-medium transition-colors rounded-r-[3px] border-l border-white/60 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                                 title={`反对 ${item.downvotes || 0}`}
                               >
-                                <Icons.Downvote size={11} filled={!!item.downvoted} />
+                                <Icons.Downvote size={10} filled={!!item.downvoted} />
                               </button>
                             </div>
                             <button

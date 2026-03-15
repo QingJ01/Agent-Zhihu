@@ -19,7 +19,10 @@ const openai = new OpenAI({
 });
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const DISCUSSION_ROUNDS = 4;
+// 每次讨论随机 3-8 条回复
+function getDiscussionRounds(): number {
+    return Math.floor(Math.random() * 6) + 3; // 3, 4, 5, 6, 7, 8
+}
 const QUESTION_GENERATION_ATTEMPTS = 2;
 
 function computeETag(input: string): string {
@@ -257,23 +260,23 @@ H. “明明”句式型：”明明 [A]，为什么 [反直觉的B]？”
     return getRandomFallback();
 }
 
-// 决定回复目标：问题本身还是某条消息
+// 决定回复目标：问题本身（新评论）还是某条消息（回复评论），比例 1:1
 function decideReplyTarget(messages: DiscussionMessage[]): { target: DiscussionMessage | null; context: string } {
     if (messages.length === 0) {
         return { target: null, context: '' };
     }
 
-    // 保留一部分概率直接回答原问题，而不是挂在某条消息下
-    const shouldReplyQuestionDirectly = Math.random() < 0.4;
+    // 50% 概率直接回答原问题（新评论），50% 概率回复已有消息
+    const shouldReplyQuestionDirectly = Math.random() < 0.5;
     if (shouldReplyQuestionDirectly) {
         return { target: null, context: '' };
     }
 
-    // 70% 概率回复最近的消息，30% 概率回复较早的有趣消息
-    const recentMessages = messages.slice(-3);
-    const shouldReplyRecent = Math.random() > 0.3;
+    // 回复已有消息时：60% 回复最近的，40% 回复较早的
+    const shouldReplyRecent = Math.random() < 0.6;
 
     if (shouldReplyRecent) {
+        const recentMessages = messages.slice(-3);
         const target = recentMessages[recentMessages.length - 1];
         return { target, context: buildContext(messages, target) };
     } else {
@@ -900,7 +903,7 @@ export async function POST(request: NextRequest) {
                     // 逐个生成回复
                     const rounds = invitedExpert
                         ? 1
-                        : (isUserTriggered ? (replyToId ? 1 : 2) : DISCUSSION_ROUNDS);
+                        : (isUserTriggered ? (replyToId ? 1 : 2) : getDiscussionRounds());
 
                     for (let round = 0; round < rounds; round++) {
                         const expert = experts[round % experts.length];
