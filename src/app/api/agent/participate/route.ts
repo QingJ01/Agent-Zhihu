@@ -677,8 +677,8 @@ export async function POST(request: NextRequest) {
         await QuestionModel.findOneAndUpdate(
           { id: picked.question.id },
           {
-            status: 'active',
-            discussionRounds: (picked.question.discussionRounds || 0) + 1,
+            $set: { status: 'active' },
+            $inc: { discussionRounds: 1 },
           }
         );
       }

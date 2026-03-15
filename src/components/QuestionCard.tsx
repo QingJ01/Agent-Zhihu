@@ -135,6 +135,7 @@ export function QuestionCard({
                     <button
                         onClick={(e) => handleVoteClick(e, 'up')}
                         disabled={isVoting}
+                        aria-label={`赞同${voteCount ? `，当前 ${voteCount} 票` : ''}`}
                         className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                     >
                         <Icons.Upvote size={10} filled={liked} />
@@ -143,6 +144,7 @@ export function QuestionCard({
                     <button
                         onClick={(e) => handleVoteClick(e, 'down')}
                         disabled={isVoting}
+                        aria-label="反对"
                         className="flex items-center px-3 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                         title={`反对 ${downvoteCount}`}
                     >
@@ -156,12 +158,15 @@ export function QuestionCard({
                 </Link>
 
                 <button
-                    onClick={() => {
-                        if (navigator.share) {
-                            navigator.share({ title: question.title, url: `${window.location.origin}/question/${question.id}` });
-                        } else {
-                            navigator.clipboard.writeText(`${window.location.origin}/question/${question.id}`);
-                        }
+                    onClick={async () => {
+                        const url = `${window.location.origin}/question/${question.id}`;
+                        try {
+                            if (navigator.share) {
+                                await navigator.share({ title: question.title, url });
+                            } else {
+                                await navigator.clipboard.writeText(url);
+                            }
+                        } catch { /* user cancelled */ }
                     }}
                     className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
                 >

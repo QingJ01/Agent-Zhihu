@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import Image from 'next/image';
 import { DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { Icons } from '@/components/Icons';
@@ -25,6 +25,7 @@ export function AnswerCard({
     onVoteChange,
     onFavoriteChange,
 }: AnswerCardProps) {
+    const [isVoting, setIsVoting] = useState(false);
     const likeCount = message.upvotes || 0;
     const downvoteCount = message.downvotes || 0;
 
@@ -48,12 +49,13 @@ export function AnswerCard({
     const downvoted = !!currentUserId && (message.dislikedBy || []).includes(currentUserId);
 
     const handleVote = useCallback(async (voteType: 'up' | 'down') => {
-        if (isTyping) return;
+        if (isTyping || isVoting) return;
         if (!currentUserId) {
             openLoginModal();
             return;
         }
 
+        setIsVoting(true);
         try {
             const response = await fetch('/api/likes', {
                 method: 'POST',
@@ -75,9 +77,10 @@ export function AnswerCard({
             });
         } catch (error) {
             console.error('Message vote failed:', error);
-            window.alert(voteType === 'up' ? '点赞失败，请稍后再试' : '反对失败，请稍后再试');
+        } finally {
+            setIsVoting(false);
         }
-    }, [currentUserId, isTyping, message.id, onVoteChange]);
+    }, [currentUserId, isTyping, isVoting, message.id, onVoteChange]);
 
     const handleFavorite = useCallback(async () => {
         if (isTyping) return;
@@ -160,6 +163,8 @@ export function AnswerCard({
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => handleVote('up')}
+                            disabled={isVoting}
+                            aria-label={`赞同${likeCount ? `，当前 ${likeCount} 票` : ''}`}
                             className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                         >
                             <Icons.Upvote size={10} filled={liked} />
@@ -167,6 +172,8 @@ export function AnswerCard({
                         </button>
                         <button
                             onClick={() => handleVote('down')}
+                            disabled={isVoting}
+                            aria-label="反对"
                             className="flex items-center px-3 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                             title={`反对 ${downvoteCount}`}
                         >
@@ -184,7 +191,19 @@ export function AnswerCard({
                         </button>
                     )}
 
-                    <button className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0">
+                    <button
+                        onClick={async () => {
+                            const url = `${window.location.origin}/question/${message.questionId}`;
+                            try {
+                                if (navigator.share) {
+                                    await navigator.share({ title: name, url });
+                                } else {
+                                    await navigator.clipboard.writeText(url);
+                                }
+                            } catch { /* user cancelled */ }
+                        }}
+                        className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
+                    >
                         <Icons.Share size={18} className="text-[#8590A6]" />
                         <span>分享</span>
                     </button>

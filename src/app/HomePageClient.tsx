@@ -253,14 +253,19 @@ export default function Home() {
         question.title = userQuestionTitle.trim();
       }
 
-      // 先调 API 持久化到数据库（触发 AI 讨论）
-      fetch('/api/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, messages: [] }),
-      }).catch(err => console.error('Failed to persist question to DB:', err));
-
+      // 先乐观更新 UI
       setQuestions((prev) => [{ ...question, messageCount: 0, isFavorited: false }, ...prev].slice(0, 50));
+
+      // 调 API 持久化到数据库（触发 AI 讨论）
+      try {
+        await fetch('/api/questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question, messages: [] }),
+        });
+      } catch (err) {
+        console.error('Failed to persist question to DB:', err);
+      }
       setQuestionFavorites((prev) => ({ ...prev, [question.id]: false }));
       setUserQuestionInput('');
       setUserQuestionTitle('');
