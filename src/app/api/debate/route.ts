@@ -216,6 +216,34 @@ ${conversationText}
   return response.choices[0]?.message?.content || '{}';
 }
 
+function parseSynthesis(synthesisContent: string) {
+  try {
+    const jsonMatch = synthesisContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const raw = JSON.parse(jsonMatch[0]);
+      return {
+        consensus: [],
+        disagreements: [raw.key_clash || '在核心观点上存在根本分歧'],
+        winner: raw.winner || 'tie',
+        winnerReason: raw.winner_reason || '双方各有千秋',
+        conclusion: raw.takeaway || '这场辩论展示了不同视角的价值。',
+        recommendations: [raw.highlight || '精彩的攻防交锋'],
+        scores: raw.scores,
+      };
+    }
+  } catch {
+    // fall through
+  }
+  return {
+    consensus: ['双方都认为这是一个值得讨论的话题'],
+    disagreements: ['在核心观点上存在根本分歧'],
+    winner: 'tie' as const,
+    winnerReason: '双方各有千秋，难分高下',
+    conclusion: '这场辩论展示了不同视角的价值，真理往往在辩论中越辩越明。',
+    recommendations: ['建议读者结合自身情况做出判断'],
+  };
+}
+
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
 
@@ -237,7 +265,8 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(limiter.retryAfter);
     }
 
-    const { topic, opponentId, userProfile: requestUserProfile } = await request.json();
+    const { topic, opponentId, userProfile: requestUserProfile, mode: requestMode } = await request.json();
+    const debateMode = requestMode || 'agent-vs-user-agent';
     const userProfile: SecondMeProfile = {
       id: session.user.id,
       name: session.user.name || requestUserProfile?.name || '用户',
@@ -274,10 +303,14 @@ export async function POST(request: NextRequest) {
           await DebateModel.create({
             id: debateId,
             topic,
+            mode: debateMode,
             userProfile: { id: userProfile.id, name: userProfile.name, avatar: userProfile.avatar || '', bio: userProfile.bio },
             opponentProfile: { id: opponent.id, name: opponent.name, avatar: opponent.avatar || '', bio: opponent.title },
+            opponentId: opponent.id,
             messages: [],
             status: 'in_progress',
+            currentRound: 0,
+            totalRounds: DEBATE_ROUNDS,
             userId: userProfile.id || 'anonymous',
           });
 
@@ -290,134 +323,144 @@ export async function POST(request: NextRequest) {
           });
 
           const messages: DebateMessage[] = [];
-          const userHistory: { role: 'user' | 'assistant'; content: string }[] = [];
           const opponentHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 
-          // 用户 Agent 开场
-          sendEvent('start', { role: 'user', name: userProfile.name });
-
-          let openingContent = '';
-          const openingStrategy = pickStrategy(DEBATE_STRATEGIES_USER);
-          const openingStream = generateResponseStream(userPrompt, [
-            { role: 'user', content: `辩论话题：${topic}\n\n本轮策略指令：${openingStrategy}\n\n请发表你的开场观点。记住：必须包含一个具体的论据。` },
-          ]);
-
-          for await (const chunk of openingStream) {
-            openingContent += chunk;
-            sendEvent('chunk', { role: 'user', content: chunk });
-          }
-
-          const openingMessage: DebateMessage = {
-            role: 'user',
-            name: userProfile.name,
-            content: openingContent,
-            timestamp: Date.now(),
-          };
-          messages.push(openingMessage);
-          sendEvent('message', openingMessage);
-
-          userHistory.push({ role: 'assistant', content: openingContent });
-          const firstOpponentStrategy = pickStrategy(DEBATE_STRATEGIES_OPPONENT);
-          opponentHistory.push({ role: 'user', content: `${openingContent}\n\n---\n本轮策略指令：${firstOpponentStrategy}\n记住你是 ${opponent.name}，坚持你的立场。发表你的下一轮发言。` });
-
-          // 辩论轮次
-          for (let round = 0; round < DEBATE_ROUNDS; round++) {
-            // 对手回应
+          if (debateMode === 'agent-vs-user') {
+            // === AGENT VS USER MODE ===
+            // Opponent opens first, then we wait for user input
             sendEvent('start', { role: 'opponent', name: opponent.name });
 
-            let opponentContent = '';
-            const opponentStream = generateResponseStream(opponentPrompt, opponentHistory);
+            let openingContent = '';
+            const openingStream = generateResponseStream(opponentPrompt, [
+              { role: 'user', content: `辩论话题：${topic}\n\n请发表你的开场观点。记住：必须包含一个具体的论据。` },
+            ]);
 
-            for await (const chunk of opponentStream) {
-              opponentContent += chunk;
+            for await (const chunk of openingStream) {
+              openingContent += chunk;
               sendEvent('chunk', { role: 'opponent', content: chunk });
             }
 
-            const opponentMessage: DebateMessage = {
+            const openingMessage: DebateMessage = {
               role: 'opponent',
               name: opponent.name,
-              content: opponentContent,
+              content: openingContent,
               timestamp: Date.now(),
             };
-            messages.push(opponentMessage);
-            sendEvent('message', opponentMessage);
+            messages.push(openingMessage);
+            sendEvent('message', openingMessage);
 
-            opponentHistory.push({ role: 'assistant', content: opponentContent });
-            const nextUserStrategy = pickStrategy(DEBATE_STRATEGIES_USER);
-            userHistory.push({ role: 'user', content: `${opponentContent}\n\n---\n本轮策略指令：${nextUserStrategy}\n请发表你的下一轮发言。记住：必须包含一个新论据，不能重复之前说过的观点。` });
+            // Save to DB and wait for user
+            await DebateModel.findOneAndUpdate(
+              { id: debateId },
+              { messages, currentRound: 1 }
+            );
 
-            // 用户 Agent 回应（最后一轮除外）
-            if (round < DEBATE_ROUNDS - 1) {
-              sendEvent('start', { role: 'user', name: userProfile.name });
+            sendEvent('waiting_for_user', { round: 1, totalRounds: DEBATE_ROUNDS });
+          } else {
+            // === AGENT VS AGENT / AGENT VS USER-AGENT MODE ===
+            const userHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 
-              let userContent = '';
-              const userStream = generateResponseStream(userPrompt, userHistory);
+            // 用户 Agent 开场
+            sendEvent('start', { role: 'user', name: userProfile.name });
 
-              for await (const chunk of userStream) {
-                userContent += chunk;
-                sendEvent('chunk', { role: 'user', content: chunk });
+            let openingContent = '';
+            const openingStrategy = pickStrategy(DEBATE_STRATEGIES_USER);
+            const openingStream = generateResponseStream(userPrompt, [
+              { role: 'user', content: `辩论话题：${topic}\n\n本轮策略指令：${openingStrategy}\n\n请发表你的开场观点。记住：必须包含一个具体的论据。` },
+            ]);
+
+            for await (const chunk of openingStream) {
+              openingContent += chunk;
+              sendEvent('chunk', { role: 'user', content: chunk });
+            }
+
+            const openingMessage: DebateMessage = {
+              role: 'user',
+              name: userProfile.name,
+              content: openingContent,
+              timestamp: Date.now(),
+            };
+            messages.push(openingMessage);
+            sendEvent('message', openingMessage);
+
+            userHistory.push({ role: 'assistant', content: openingContent });
+            const firstOpponentStrategy = pickStrategy(DEBATE_STRATEGIES_OPPONENT);
+            opponentHistory.push({ role: 'user', content: `${openingContent}\n\n---\n本轮策略指令：${firstOpponentStrategy}\n记住你是 ${opponent.name}，坚持你的立场。发表你的下一轮发言。` });
+
+            // 辩论轮次
+            for (let round = 0; round < DEBATE_ROUNDS; round++) {
+              // 对手回应
+              sendEvent('start', { role: 'opponent', name: opponent.name });
+
+              let opponentContent = '';
+              const opponentStream = generateResponseStream(opponentPrompt, opponentHistory);
+
+              for await (const chunk of opponentStream) {
+                opponentContent += chunk;
+                sendEvent('chunk', { role: 'opponent', content: chunk });
               }
 
-              const userMessage: DebateMessage = {
-                role: 'user',
-                name: userProfile.name,
-                content: userContent,
+              const opponentMessage: DebateMessage = {
+                role: 'opponent',
+                name: opponent.name,
+                content: opponentContent,
                 timestamp: Date.now(),
               };
-              messages.push(userMessage);
-              sendEvent('message', userMessage);
+              messages.push(opponentMessage);
+              sendEvent('message', opponentMessage);
 
-              userHistory.push({ role: 'assistant', content: userContent });
-              const nextOpponentStrategy = pickStrategy(DEBATE_STRATEGIES_OPPONENT);
-              opponentHistory.push({ role: 'user', content: `${userContent}\n\n---\n本轮策略指令：${nextOpponentStrategy}\n记住你是 ${opponent.name}，坚持你的立场。发表你的下一轮发言。` });
+              opponentHistory.push({ role: 'assistant', content: opponentContent });
+              const nextUserStrategy = pickStrategy(DEBATE_STRATEGIES_USER);
+              userHistory.push({ role: 'user', content: `${opponentContent}\n\n---\n本轮策略指令：${nextUserStrategy}\n请发表你的下一轮发言。记住：必须包含一个新论据，不能重复之前说过的观点。` });
+
+              // 用户 Agent 回应（最后一轮除外）
+              if (round < DEBATE_ROUNDS - 1) {
+                sendEvent('start', { role: 'user', name: userProfile.name });
+
+                let userContent = '';
+                const userStream = generateResponseStream(userPrompt, userHistory);
+
+                for await (const chunk of userStream) {
+                  userContent += chunk;
+                  sendEvent('chunk', { role: 'user', content: chunk });
+                }
+
+                const userMessage: DebateMessage = {
+                  role: 'user',
+                  name: userProfile.name,
+                  content: userContent,
+                  timestamp: Date.now(),
+                };
+                messages.push(userMessage);
+                sendEvent('message', userMessage);
+
+                userHistory.push({ role: 'assistant', content: userContent });
+                const nextOpponentStrategy = pickStrategy(DEBATE_STRATEGIES_OPPONENT);
+                opponentHistory.push({ role: 'user', content: `${userContent}\n\n---\n本轮策略指令：${nextOpponentStrategy}\n记住你是 ${opponent.name}，坚持你的立场。发表你的下一轮发言。` });
+              }
             }
+
+            // 生成总结报告
+            sendEvent('synthesizing', {});
+            const synthesisContent = await generateSynthesis(topic, messages, userProfile, opponent);
+
+            const synthesis = parseSynthesis(synthesisContent);
+
+            sendEvent('synthesis', synthesis);
+
+            // 保存到数据库
+            await DebateModel.findOneAndUpdate(
+              { id: debateId },
+              { messages, synthesis, status: 'completed' }
+            );
+
+            sendEvent('done', {
+              id: debateId,
+              topic,
+              messages,
+              synthesis,
+            });
           }
-
-          // 生成总结报告
-          sendEvent('synthesizing', {});
-          const synthesisContent = await generateSynthesis(topic, messages, userProfile, opponent);
-
-          let synthesis;
-          try {
-            const jsonMatch = synthesisContent.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              const raw = JSON.parse(jsonMatch[0]);
-              // Map new format to frontend-expected format
-              synthesis = {
-                consensus: [],
-                disagreements: [raw.key_clash || '在核心观点上存在根本分歧'],
-                winner: raw.winner || 'tie',
-                winnerReason: raw.winner_reason || '双方各有千秋',
-                conclusion: raw.takeaway || '这场辩论展示了不同视角的价值。',
-                recommendations: [raw.highlight || '精彩的攻防交锋'],
-                scores: raw.scores,
-              };
-            }
-          } catch {
-            synthesis = {
-              consensus: ['双方都认为这是一个值得讨论的话题'],
-              disagreements: ['在核心观点上存在根本分歧'],
-              winner: 'tie',
-              winnerReason: '双方各有千秋，难分高下',
-              conclusion: '这场辩论展示了不同视角的价值，真理往往在辩论中越辩越明。',
-              recommendations: ['建议读者结合自身情况做出判断'],
-            };
-          }
-
-          sendEvent('synthesis', synthesis);
-
-          // 保存到数据库
-          await DebateModel.findOneAndUpdate(
-            { id: debateId },
-            { messages, synthesis, status: 'completed' }
-          );
-
-          sendEvent('done', {
-            id: debateId,
-            topic,
-            messages,
-            synthesis,
-          });
 
           controller.close();
         } catch (error) {
