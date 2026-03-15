@@ -28,13 +28,20 @@ interface ActivityItem {
   upvotes?: number;
   downvotes?: number;
   createdAt?: string | number;
-  _type?: 'question' | 'answer';
+  _type?: 'question' | 'answer' | 'debate';
   liked?: boolean;
   downvoted?: boolean;
   isFavorited?: boolean;
+  // Debate-specific fields
+  topic?: string;
+  opponentName?: string;
+  winner?: 'user' | 'opponent' | 'tie';
+  conclusion?: string;
+  roundCount?: number;
+  status?: string;
 }
 
-type ActivityTab = 'questions' | 'answers' | 'favorites' | 'likes';
+type ActivityTab = 'questions' | 'answers' | 'debates' | 'favorites' | 'likes';
 type ProviderKey = 'secondme' | 'github' | 'google';
 
 interface EditableProfile {
@@ -56,6 +63,7 @@ const EMPTY_STATS: ProfileStats = {
 function tabTitle(tab: ActivityTab): string {
   if (tab === 'questions') return '我的提问';
   if (tab === 'answers') return '我的回答';
+  if (tab === 'debates') return '我的辩论';
   if (tab === 'favorites') return '我的收藏';
   return '我的点赞';
 }
@@ -302,10 +310,23 @@ export default function ProfilePage() {
         const res = await fetch(`/api/profile/activity?type=${activeTab}&limit=10`);
         const data = await res.json();
         const rawItems = Array.isArray(data.items) ? data.items : [];
-        const normalizedItems: ActivityItem[] = rawItems.map((item: ActivityItem) => ({
-          ...item,
-          _type: item._type || (activeTab === 'answers' ? 'answer' : 'question'),
-        }));
+        const normalizedItems: ActivityItem[] = rawItems.map((item: ActivityItem & { opponentProfile?: { name?: string }; synthesis?: { winner?: string; conclusion?: string }; messages?: unknown[] }) => {
+          if (activeTab === 'debates') {
+            return {
+              ...item,
+              _type: 'debate' as const,
+              topic: item.topic,
+              opponentName: item.opponentProfile?.name || '对手',
+              winner: item.synthesis?.winner as 'user' | 'opponent' | 'tie' | undefined,
+              conclusion: item.synthesis?.conclusion,
+              roundCount: Math.floor((item.messages?.length || 0) / 2),
+            };
+          }
+          return {
+            ...item,
+            _type: item._type || (activeTab === 'answers' ? 'answer' : 'question'),
+          };
+        });
 
         const questionIds = normalizedItems
           .filter((item) => item._type === 'question' && item.id)
@@ -388,7 +409,7 @@ export default function ProfilePage() {
   const handleActivityVote = async (item: ActivityItem, voteType: 'up' | 'down') => {
     if (!item.id) return;
     try {
-      const targetType = item._type === 'answer' ? 'message' : 'question';
+      const targetType = item._type === 'debate' ? 'debate' : item._type === 'answer' ? 'message' : 'question';
       const response = await fetch('/api/likes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -573,6 +594,7 @@ export default function ProfilePage() {
                 {[
                   { key: 'questions' as const, label: '提问', count: stats.questions },
                   { key: 'answers' as const, label: '回答', count: stats.answers },
+                  { key: 'debates' as const, label: '辩论', count: stats.debates },
                   { key: 'favorites' as const, label: '收藏', count: stats.favorites },
                   { key: 'likes' as const, label: '点赞', count: stats.likesGiven },
                 ].map((tab) => (
@@ -602,56 +624,109 @@ export default function ProfilePage() {
                 <div className="divide-y divide-[#F0F2F7]">
                   {activity.map((item, idx) => (
                     <div key={item.id || idx} className="p-5 hover:bg-transparent">
-                      <div className="mb-2 text-[#8590A6] text-[15px] flex items-center gap-2">
-                        <span>{item._type === 'answer' ? '回答了问题' : '提出了问题'}</span>
-                        <span className="text-xs text-[#999]">{new Date(item.createdAt || Date.now()).toLocaleDateString()}</span>
-                      </div>
-                      <h2 className="text-[18px] font-bold text-[#121212] mb-1.5 leading-snug hover:text-[#175199] cursor-pointer transition-colors">
-                        <Link href={`/question/${item.questionId || item.id}`}>{item.title || item.questionTitle || '无标题'}</Link>
-                      </h2>
-                      {item.content && (
-                        <div className="text-[15px] text-[#121212] leading-[1.67] line-clamp-3 mb-2 cursor-pointer hover:text-[#646464] transition-colors">
-                          {item.content.replace(/<[^>]+>/g, '')}
-                        </div>
+                      {item._type === 'debate' ? (
+                        <>
+                          <div className="mb-2 text-[#8590A6] text-[15px] flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-[2px] bg-orange-50 text-orange-600 border border-orange-100">
+                              <Icons.Swords size={12} />
+                              辩论
+                            </span>
+                            <span>vs {item.opponentName}</span>
+                            <span className="text-xs text-[#999]">{new Date(item.createdAt || Date.now()).toLocaleDateString()}</span>
+                          </div>
+                          <h2 className="text-[18px] font-bold text-[#121212] mb-1.5 leading-snug hover:text-[#175199] cursor-pointer transition-colors">
+                            <Link href={`/debate?id=${item.id}`}>{item.topic || '无标题'}</Link>
+                          </h2>
+                          {item.conclusion && (
+                            <div className="text-[15px] text-[#121212] leading-[1.67] line-clamp-3 mb-2">
+                              {item.conclusion}
+                            </div>
+                          )}
+                          <div className="mt-2.5 flex items-center gap-4">
+                            <div className="flex items-center rounded-[3px] overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => handleActivityVote(item, 'up')}
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
+                              >
+                                <Icons.Upvote size={11} filled={!!item.liked} />
+                                <span>{item.upvotes || '赞同'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleActivityVote(item, 'down')}
+                                className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
+                                title={`反对 ${item.downvotes || 0}`}
+                              >
+                                <Icons.Downvote size={11} filled={!!item.downvoted} />
+                              </button>
+                            </div>
+                            <span className="text-[#8590A6] text-sm flex items-center gap-1.5">
+                              <Icons.Comment size={16} className="text-[#8590A6]" />
+                              {item.roundCount || 0} 回合
+                            </span>
+                            {item.winner && (
+                              <span className={`text-sm flex items-center gap-1 ${item.winner === 'user' ? 'text-[#0066FF]' : item.winner === 'opponent' ? 'text-orange-600' : 'text-[#8590A6]'}`}>
+                                {item.winner === 'tie' ? '🤝 平局' : item.winner === 'user' ? '🏆 胜利' : '🎯 落败'}
+                              </span>
+                            )}
+                            {item.status !== 'completed' && (
+                              <span className="text-[#8590A6] text-sm">进行中</span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="mb-2 text-[#8590A6] text-[15px] flex items-center gap-2">
+                            <span>{item._type === 'answer' ? '回答了问题' : '提出了问题'}</span>
+                            <span className="text-xs text-[#999]">{new Date(item.createdAt || Date.now()).toLocaleDateString()}</span>
+                          </div>
+                          <h2 className="text-[18px] font-bold text-[#121212] mb-1.5 leading-snug hover:text-[#175199] cursor-pointer transition-colors">
+                            <Link href={`/question/${item.questionId || item.id}`}>{item.title || item.questionTitle || '无标题'}</Link>
+                          </h2>
+                          {item.content && (
+                            <div className="text-[15px] text-[#121212] leading-[1.67] line-clamp-3 mb-2 cursor-pointer hover:text-[#646464] transition-colors">
+                              {item.content.replace(/<[^>]+>/g, '')}
+                            </div>
+                          )}
+                          <div className="mt-2.5 flex items-center gap-4">
+                            <div className="flex items-center rounded-[3px] overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => handleActivityVote(item, 'up')}
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
+                              >
+                                <Icons.Upvote size={11} filled />
+                                <span>{item.upvotes || '赞同'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleActivityVote(item, 'down')}
+                                className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
+                                title={`反对 ${item.downvotes || 0}`}
+                              >
+                                <Icons.Downvote size={11} filled={!!item.downvoted} />
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleActivityFavorite(item)}
+                              className="text-[#8590A6] text-sm hover:opacity-80 cursor-pointer flex items-center gap-1.5 transition-opacity"
+                            >
+                              <Icons.Favorite size={16} className="text-[#8590A6]" />
+                              {item.isFavorited ? '已收藏' : '收藏'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleActivityComment(item)}
+                              className="text-[#8590A6] text-sm hover:opacity-80 cursor-pointer flex items-center gap-1.5 transition-opacity"
+                            >
+                              <Icons.Comment size={16} className="text-[#8590A6]" />
+                              评论
+                            </button>
+                          </div>
+                        </>
                       )}
-
-                      <div className="mt-2.5 flex items-center gap-4">
-                        <div className="flex items-center rounded-[3px] overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => handleActivityVote(item, 'up')}
-                            className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
-                          >
-                            <Icons.Upvote size={11} filled />
-                            <span>{item.upvotes || '赞同'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleActivityVote(item, 'down')}
-                            className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
-                            title={`反对 ${item.downvotes || 0}`}
-                          >
-                            <Icons.Downvote size={11} filled={!!item.downvoted} />
-                          </button>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleActivityFavorite(item)}
-                          className="text-[#8590A6] text-sm hover:opacity-80 cursor-pointer flex items-center gap-1.5 transition-opacity"
-                        >
-                          <Icons.Favorite size={16} className="text-[#8590A6]" />
-                          {item.isFavorited ? '已收藏' : '收藏'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleActivityComment(item)}
-                          className="text-[#8590A6] text-sm hover:opacity-80 cursor-pointer flex items-center gap-1.5 transition-opacity"
-                        >
-                          <Icons.Comment size={16} className="text-[#8590A6]" />
-                          评论
-                        </button>
-                      </div>
                     </div>
                   ))}
                 </div>
@@ -676,6 +751,7 @@ export default function ProfilePage() {
                   { label: '获得收藏', value: stats.favorites, icon: '⭐' },
                   { label: '参与回答', value: stats.answers, icon: '📝' },
                   { label: '提出问题', value: stats.questions, icon: '❓' },
+                  { label: '参与辩论', value: stats.debates, icon: '⚔️' },
                 ].map((stat) => (
                   <div key={stat.label} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer">
                     <div className="flex items-center gap-3 text-[#646464] text-[14px]">

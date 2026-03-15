@@ -97,6 +97,22 @@ const DebateSchema = new Schema({
     required: true,
     index: true, // 用于查询某个用户的所有辩论
   },
+  upvotes: {
+    type: Number,
+    default: 0,
+  },
+  downvotes: {
+    type: Number,
+    default: 0,
+  },
+  likedBy: {
+    type: [String],
+    default: [],
+  },
+  dislikedBy: {
+    type: [String],
+    default: [],
+  },
 }, {
   timestamps: true,
 });
@@ -138,6 +154,10 @@ export interface IDebate {
   synthesis?: IDebateSynthesis;
   status: 'pending' | 'in_progress' | 'completed';
   userId: string;
+  upvotes: number;
+  downvotes: number;
+  likedBy: string[];
+  dislikedBy: string[];
   createdAt: Date;
   updatedAt: Date;
 }

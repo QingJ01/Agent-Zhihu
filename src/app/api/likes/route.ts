@@ -4,6 +4,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { connectDB } from '@/lib/mongodb';
 import QuestionModel from '@/models/Question';
 import MessageModel from '@/models/Message';
+import DebateModel from '@/models/Debate';
 
 type VoteType = 'up' | 'down';
 type VoteAction = 'liked' | 'unliked' | 'downvoted' | 'undownvoted';
@@ -13,11 +14,12 @@ function safeCount(value: unknown): number {
     return Math.max(0, Math.floor(value));
 }
 
-async function applyVoteAtomic(targetType: 'question' | 'message', targetId: string, userId: string, voteType: VoteType) {
+async function applyVoteAtomic(targetType: 'question' | 'message' | 'debate', targetId: string, userId: string, voteType: VoteType) {
+    const ModelMap = { question: QuestionModel, message: MessageModel, debate: DebateModel };
     const Model: {
         updateOne: (filter: Record<string, unknown>, update: Record<string, unknown>) => Promise<{ modifiedCount: number }>;
         findOne: (filter: Record<string, unknown>) => { select: (projection: string) => { lean: () => Promise<{ upvotes?: number; downvotes?: number; likedBy?: string[]; dislikedBy?: string[] } | null> } };
-    } = (targetType === 'question' ? QuestionModel : MessageModel) as unknown as {
+    } = ModelMap[targetType] as unknown as {
         updateOne: (filter: Record<string, unknown>, update: Record<string, unknown>) => Promise<{ modifiedCount: number }>;
         findOne: (filter: Record<string, unknown>) => { select: (projection: string) => { lean: () => Promise<{ upvotes?: number; downvotes?: number; likedBy?: string[]; dislikedBy?: string[] } | null> } };
     };
@@ -86,7 +88,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
         }
 
-        if (targetType !== 'question' && targetType !== 'message') {
+        if (targetType !== 'question' && targetType !== 'message' && targetType !== 'debate') {
             return NextResponse.json({ error: 'Invalid target type' }, { status: 400 });
         }
 
