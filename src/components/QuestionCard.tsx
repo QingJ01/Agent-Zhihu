@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { Question } from '@/types/zhihu';
 import { Icons } from './Icons';
 import { HashtagText } from './HashtagText';
-import { openLoginModal } from '@/lib/loginModal';
+import { useVote } from '@/lib/useVote';
+import { useFavorite } from '@/lib/useFavorite';
 
 interface QuestionCardProps {
     question: Question & { messageCount?: number };
@@ -24,8 +25,8 @@ export function QuestionCard({
     onVoteChange,
     onFavoriteChange,
 }: QuestionCardProps) {
-    const [isVoting, setIsVoting] = useState(false);
-    const [isFavoriting, setIsFavoriting] = useState(false);
+    const { isVoting, vote } = useVote(question.id, 'question', currentUserId, onVoteChange);
+    const { isFavoriting, toggleFavorite } = useFavorite(question.id, 'question', currentUserId, onFavoriteChange);
 
     const liked = useMemo(() => {
         if (!currentUserId) return false;
@@ -38,74 +39,6 @@ export function QuestionCard({
 
     const voteCount = question.upvotes || 0;
     const downvoteCount = question.downvotes || 0;
-
-    const handleVoteClick = useCallback(async (e: React.MouseEvent, voteType: 'up' | 'down') => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!currentUserId || isVoting) {
-            if (!currentUserId) { openLoginModal(); }
-            return;
-        }
-
-        setIsVoting(true);
-        try {
-            const response = await fetch('/api/likes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetId: question.id, targetType: 'question', voteType }),
-            });
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => null);
-                throw new Error(data?.error || (voteType === 'up' ? '点赞失败' : '反对失败'));
-            }
-
-            const result = await response.json();
-            onVoteChange?.(question.id, {
-                liked: !!result.liked,
-                downvoted: !!result.downvoted,
-                upvotes: Number(result.upvotes) || 0,
-                downvotes: Number(result.downvotes) || 0,
-            });
-        } catch (error) {
-            console.error('Question vote failed:', error);
-            window.alert(voteType === 'up' ? '点赞失败，请稍后再试' : '反对失败，请稍后再试');
-        } finally {
-            setIsVoting(false);
-        }
-    }, [currentUserId, isVoting, onVoteChange, question.id]);
-
-    const handleFavoriteClick = useCallback(async (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!currentUserId || isFavoriting) {
-            if (!currentUserId) { openLoginModal(); }
-            return;
-        }
-
-        setIsFavoriting(true);
-        try {
-            const response = await fetch('/api/favorites', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetId: question.id, targetType: 'question' }),
-            });
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => null);
-                throw new Error(data?.error || '收藏失败');
-            }
-
-            const result = await response.json();
-            onFavoriteChange?.(question.id, !!result.favorited);
-        } catch (error) {
-            console.error('Question favorite failed:', error);
-            window.alert('收藏失败，请稍后再试');
-        } finally {
-            setIsFavoriting(false);
-        }
-    }, [currentUserId, isFavoriting, onFavoriteChange, question.id]);
-
 
     return (
         <div className="p-4 md:p-[20px] bg-white border-b border-[var(--zh-border)] last:border-b-0 hover:shadow-[0_1px_3px_rgba(18,18,18,0.1)] transition-shadow">
@@ -131,21 +64,21 @@ export function QuestionCard({
             {/* Footer / Actions */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
                 {/* Vote Buttons */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <button
-                        onClick={(e) => handleVoteClick(e, 'up')}
+                        onClick={(e) => vote('up', e)}
                         disabled={isVoting}
                         aria-label={`赞同${voteCount ? `，当前 ${voteCount} 票` : ''}`}
-                        className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                        className="flex items-center gap-1.5 h-8 px-3 md:px-4 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                     >
                         <Icons.Upvote size={10} filled={liked} />
                         <span>赞同{voteCount ? ` ${voteCount}` : ''}</span>
                     </button>
                     <button
-                        onClick={(e) => handleVoteClick(e, 'down')}
+                        onClick={(e) => vote('down', e)}
                         disabled={isVoting}
                         aria-label="反对"
-                        className="flex items-center px-3 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                        className="flex items-center justify-center h-8 w-8 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                         title={`反对 ${downvoteCount}`}
                     >
                         <Icons.Downvote size={10} filled={downvoted} />
@@ -175,7 +108,7 @@ export function QuestionCard({
                 </button>
 
                 <button
-                    onClick={handleFavoriteClick}
+                    onClick={toggleFavorite}
                     disabled={isFavoriting}
                     className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
                 >
