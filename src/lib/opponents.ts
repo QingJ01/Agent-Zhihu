@@ -79,3 +79,14 @@ export function selectOpponent(topic: string, opponentId?: string): OpponentProf
 
   return OPPONENT_PROFILES[Math.floor(Math.random() * OPPONENT_PROFILES.length)];
 }
+
+/**
+ * Select two different opponents for agent-vs-agent mode.
+ * Returns [proponent, opponent] — the first argues FOR, the second AGAINST.
+ */
+export function selectTwoOpponents(topic: string, opponentId?: string): [OpponentProfile, OpponentProfile] {
+  const first = selectOpponent(topic, opponentId);
+  const remaining = OPPONENT_PROFILES.filter((p) => p.id !== first.id);
+  const second = remaining[Math.floor(Math.random() * remaining.length)];
+  return [first, second];
+}

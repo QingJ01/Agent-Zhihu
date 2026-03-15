@@ -51,6 +51,7 @@ export function DebateArena() {
   const [userInput, setUserInput] = useState('');
   const [debateId, setDebateId] = useState<string | null>(null);
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const [proponent, setProponent] = useState<OpponentProfile | null>(null); // for agent-vs-agent: the "user side" AI expert
   const userInputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -89,6 +90,9 @@ export function DebateArena() {
             setOpponent(op);
             opponentRef.current = op;
             setDebateId(parsed.id);
+          }
+          if (parsed.proponentProfile) {
+            setProponent(parsed.proponentProfile as OpponentProfile);
           }
           break;
 
@@ -244,6 +248,7 @@ export function DebateArena() {
     setMessages([]);
     setSynthesis(null);
     setOpponent(null);
+    setProponent(null);
     opponentRef.current = null;
     setError(null);
     setShowReport(false);
@@ -354,15 +359,24 @@ export function DebateArena() {
     setIsSynthesizing(false);
     setWaitingForUser(false);
     setDebateId(null);
+    setProponent(null);
   }, []);
 
   const isLoading = streamState.isStreaming || isSubmittingReply;
+
+  // Display name for the "user" side depends on mode
+  const userSideName = mode === 'agent-vs-agent' && proponent
+    ? proponent.name
+    : mode === 'agent-vs-user'
+      ? (session?.user?.name || '我')
+      : `${session?.user?.name || '我'} 的 Agent`;
+
   const displayMessages = streamState.currentRole && streamState.currentContent
     ? [
       ...messages,
       {
         role: streamState.currentRole,
-        name: streamState.currentRole === 'user' ? (session?.user?.name || '我') : opponent?.name || '对手',
+        name: streamState.currentRole === 'user' ? userSideName : opponent?.name || '对手',
         content: streamState.currentContent,
         timestamp: Date.now(),
       },
@@ -506,14 +520,18 @@ export function DebateArena() {
                   </span>
                   <span>vs</span>
                   <span className="flex items-center gap-1.5">
-                    {session?.user?.image ? (
+                    {mode === 'agent-vs-agent' && proponent ? (
+                      <span className="w-5 h-5 rounded-full bg-[var(--zh-bg)] flex items-center justify-center text-[10px] font-bold">
+                        {proponent.name.charAt(0)}
+                      </span>
+                    ) : session?.user?.image ? (
                       <Image src={session.user.image} alt="" width={20} height={20} className="w-5 h-5 rounded-full object-cover" unoptimized />
                     ) : (
                       <span className="w-5 h-5 rounded-full bg-[var(--zh-bg)] flex items-center justify-center text-[10px] font-bold">
                         {(session?.user?.name || '我').charAt(0)}
                       </span>
                     )}
-                    {mode === 'agent-vs-user' ? (session?.user?.name || '我') : `${session?.user?.name || '我'} 的 Agent`}
+                    {userSideName}
                   </span>
                 </div>
                 {(isLoading || waitingForUser) && (
@@ -594,7 +612,7 @@ export function DebateArena() {
                   <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
                     <div className="flex items-center gap-2 text-[var(--zh-text-gray)] text-[14px]">
                       <span className="animate-spin rounded-full h-3.5 w-3.5 border border-[var(--zh-text-gray)] border-t-transparent" />
-                      {streamState.currentRole === 'user' ? (mode === 'agent-vs-user' ? (session?.user?.name || '我') : `${session?.user?.name || '我'} 的 Agent`) : opponent.name} 正在发言...
+                      {streamState.currentRole === 'user' ? userSideName : opponent.name} 正在发言...
                     </div>
                   </div>
                 )}
@@ -653,7 +671,7 @@ export function DebateArena() {
               synthesis && (
                 <SynthesisReport
                   synthesis={synthesis}
-                  userName={mode === 'agent-vs-user' ? (session?.user?.name || '我') : (session?.user?.name || '我的Agent')}
+                  userName={userSideName}
                   opponentName={opponent.name}
                 />
               )
@@ -671,7 +689,9 @@ export function DebateArena() {
           <p className="text-[13px] text-[var(--zh-text-gray)] leading-relaxed">
             {mode === 'agent-vs-user'
               ? `你将亲自下场，与 AI 专家展开 ${TOTAL_ROUNDS} 轮辩论。对手先发言，然后你回复，最终生成认知报告。`
-              : `选择一个有争议的话题，AI 专家会从不同立场展开 ${TOTAL_ROUNDS} 轮激烈辩论，最终生成认知报告。`
+              : mode === 'agent-vs-agent'
+                ? `两个 AI 专家将从不同立场展开 ${TOTAL_ROUNDS} 轮激烈辩论，你可以旁观并学习不同视角，最终生成认知报告。`
+                : `你的 AI 分身将代你出战，与 AI 专家展开 ${TOTAL_ROUNDS} 轮辩论，最终生成认知报告。`
             }
           </p>
         </div>

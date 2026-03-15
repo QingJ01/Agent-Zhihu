@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
 import { getServerSession } from 'next-auth';
 import { SecondMeProfile, DebateMessage, OpponentProfile } from '@/types/secondme';
-import { selectOpponent } from '@/lib/opponents';
+import { selectOpponent, selectTwoOpponents } from '@/lib/opponents';
 import { connectDB } from '@/lib/mongodb';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { checkRateLimit, getClientIp, rateLimitResponse, validateJsonBodySize } from '@/lib/api-security';
@@ -281,12 +281,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const persona = await fetchUserPersona(session.user.id);
-    const personaSnippet = buildPersonaSnippet(persona);
+    // For agent-vs-agent, select two system experts; otherwise use user agent + one opponent
+    const isAgentVsAgent = debateMode === 'agent-vs-agent';
 
-    const opponent = selectOpponent(topic, opponentId);
-    const userPrompt = buildUserAgentPrompt(userProfile, topic, personaSnippet);
-    const opponentPrompt = buildOpponentPrompt(opponent, topic);
+    let opponent: OpponentProfile;
+    let proponent: OpponentProfile | null = null;
+    let userPrompt: string;
+    let opponentPrompt: string;
+
+    if (isAgentVsAgent) {
+      const [first, second] = selectTwoOpponents(topic, opponentId);
+      proponent = first;
+      opponent = second;
+      // Both sides use opponent-style prompts (system AI experts)
+      userPrompt = buildOpponentPrompt(proponent, topic);
+      opponentPrompt = buildOpponentPrompt(opponent, topic);
+    } else {
+      opponent = selectOpponent(topic, opponentId);
+      const persona = await fetchUserPersona(session.user.id);
+      const personaSnippet = buildPersonaSnippet(persona);
+      userPrompt = buildUserAgentPrompt(userProfile, topic, personaSnippet);
+      opponentPrompt = buildOpponentPrompt(opponent, topic);
+    }
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -299,12 +315,18 @@ export async function POST(request: NextRequest) {
 
           const debateId = generateId('debate');
 
+          // For agent-vs-agent, the "user" side is actually the proponent AI expert
+          const userSideProfile = isAgentVsAgent && proponent
+            ? { id: proponent.id, name: proponent.name, avatar: proponent.avatar || '', bio: proponent.title }
+            : { id: userProfile.id, name: userProfile.name, avatar: userProfile.avatar || '', bio: userProfile.bio };
+          const userSideName = isAgentVsAgent && proponent ? proponent.name : userProfile.name;
+
           // 创建辩论记录
           await DebateModel.create({
             id: debateId,
             topic,
             mode: debateMode,
-            userProfile: { id: userProfile.id, name: userProfile.name, avatar: userProfile.avatar || '', bio: userProfile.bio },
+            userProfile: userSideProfile,
             opponentProfile: { id: opponent.id, name: opponent.name, avatar: opponent.avatar || '', bio: opponent.title },
             opponentId: opponent.id,
             messages: [],
@@ -318,8 +340,9 @@ export async function POST(request: NextRequest) {
           sendEvent('init', {
             id: debateId,
             topic,
-            userProfile,
+            userProfile: userSideProfile,
             opponentProfile: opponent,
+            ...(isAgentVsAgent && proponent ? { proponentProfile: proponent } : {}),
           });
 
           const messages: DebateMessage[] = [];
@@ -360,11 +383,11 @@ export async function POST(request: NextRequest) {
             // === AGENT VS AGENT / AGENT VS USER-AGENT MODE ===
             const userHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 
-            // 用户 Agent 开场
-            sendEvent('start', { role: 'user', name: userProfile.name });
+            // 正方开场（agent-vs-agent 用系统专家名，agent-vs-user-agent 用用户名）
+            sendEvent('start', { role: 'user', name: userSideName });
 
             let openingContent = '';
-            const openingStrategy = pickStrategy(DEBATE_STRATEGIES_USER);
+            const openingStrategy = pickStrategy(isAgentVsAgent ? DEBATE_STRATEGIES_OPPONENT : DEBATE_STRATEGIES_USER);
             const openingStream = generateResponseStream(userPrompt, [
               { role: 'user', content: `辩论话题：${topic}\n\n本轮策略指令：${openingStrategy}\n\n请发表你的开场观点。记住：必须包含一个具体的论据。` },
             ]);
@@ -376,7 +399,7 @@ export async function POST(request: NextRequest) {
 
             const openingMessage: DebateMessage = {
               role: 'user',
-              name: userProfile.name,
+              name: userSideName,
               content: openingContent,
               timestamp: Date.now(),
             };
@@ -410,12 +433,15 @@ export async function POST(request: NextRequest) {
               sendEvent('message', opponentMessage);
 
               opponentHistory.push({ role: 'assistant', content: opponentContent });
-              const nextUserStrategy = pickStrategy(DEBATE_STRATEGIES_USER);
-              userHistory.push({ role: 'user', content: `${opponentContent}\n\n---\n本轮策略指令：${nextUserStrategy}\n请发表你的下一轮发言。记住：必须包含一个新论据，不能重复之前说过的观点。` });
+              const nextUserStrategy = pickStrategy(isAgentVsAgent ? DEBATE_STRATEGIES_OPPONENT : DEBATE_STRATEGIES_USER);
+              const userStrategyNote = isAgentVsAgent && proponent
+                ? `记住你是 ${proponent.name}，坚持你的立场。发表你的下一轮发言。`
+                : '请发表你的下一轮发言。记住：必须包含一个新论据，不能重复之前说过的观点。';
+              userHistory.push({ role: 'user', content: `${opponentContent}\n\n---\n本轮策略指令：${nextUserStrategy}\n${userStrategyNote}` });
 
-              // 用户 Agent 回应（最后一轮除外）
+              // 正方回应（最后一轮除外）
               if (round < DEBATE_ROUNDS - 1) {
-                sendEvent('start', { role: 'user', name: userProfile.name });
+                sendEvent('start', { role: 'user', name: userSideName });
 
                 let userContent = '';
                 const userStream = generateResponseStream(userPrompt, userHistory);
@@ -427,7 +453,7 @@ export async function POST(request: NextRequest) {
 
                 const userMessage: DebateMessage = {
                   role: 'user',
-                  name: userProfile.name,
+                  name: userSideName,
                   content: userContent,
                   timestamp: Date.now(),
                 };
@@ -442,7 +468,10 @@ export async function POST(request: NextRequest) {
 
             // 生成总结报告
             sendEvent('synthesizing', {});
-            const synthesisContent = await generateSynthesis(topic, messages, userProfile, opponent);
+            const synthesisUserProfile = isAgentVsAgent && proponent
+              ? { ...userProfile, name: proponent.name, bio: proponent.title }
+              : userProfile;
+            const synthesisContent = await generateSynthesis(topic, messages, synthesisUserProfile, opponent);
 
             const synthesis = parseSynthesis(synthesisContent);
 
