@@ -92,6 +92,23 @@ const DebateSchema = new Schema({
     default: 'pending',
     index: true,
   },
+  mode: {
+    type: String,
+    enum: ['agent-vs-agent', 'agent-vs-user-agent', 'agent-vs-user'],
+    default: 'agent-vs-user-agent',
+  },
+  currentRound: {
+    type: Number,
+    default: 0,
+  },
+  totalRounds: {
+    type: Number,
+    default: 5,
+  },
+  opponentId: {
+    type: String,
+    default: null,
+  },
   userId: {
     type: String,
     required: true,
@@ -153,6 +170,10 @@ export interface IDebate {
   messages: IDebateMessage[];
   synthesis?: IDebateSynthesis;
   status: 'pending' | 'in_progress' | 'completed';
+  mode?: 'agent-vs-agent' | 'agent-vs-user-agent' | 'agent-vs-user';
+  currentRound?: number;
+  totalRounds?: number;
+  opponentId?: string;
   userId: string;
   upvotes: number;
   downvotes: number;

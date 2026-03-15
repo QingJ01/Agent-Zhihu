@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { DebateSession, DebateMessage, DebateSynthesis, OpponentProfile } from '@/types/secondme';
 import { SynthesisReport } from './SynthesisReport';
@@ -8,6 +8,7 @@ import { DebateHistory } from './DebateHistory';
 import { useDebateHistory } from '@/lib/useDebateHistory';
 import { OPPONENT_PROFILES } from '@/lib/opponents';
 import { openLoginModal } from '@/lib/loginModal';
+import { consumeSSEStream } from '@/lib/useSSEStream';
 import Image from 'next/image';
 
 export type DebateMode = 'agent-vs-agent' | 'agent-vs-user-agent' | 'agent-vs-user';
@@ -21,7 +22,7 @@ interface StreamState {
 const MODE_OPTIONS: { key: DebateMode; label: string; desc: string; disabled?: boolean }[] = [
   { key: 'agent-vs-agent', label: 'Agent vs Agent', desc: '两个 AI 专家互相辩论' },
   { key: 'agent-vs-user-agent', label: 'Agent vs 你的 Agent', desc: '你的 AI 分身代你出战' },
-  { key: 'agent-vs-user', label: 'Agent vs 你', desc: '你亲自下场和 AI 辩论（即将上线）', disabled: true },
+  { key: 'agent-vs-user', label: 'Agent vs 你', desc: '你亲自下场和 AI 辩论' },
 ];
 
 export function DebateArena() {
@@ -45,6 +46,14 @@ export function DebateArena() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const opponentRef = useRef<OpponentProfile | null>(null);
 
+  // agent-vs-user specific state
+  const [waitingForUser, setWaitingForUser] = useState(false);
+  const [userInput, setUserInput] = useState('');
+  const [debateId, setDebateId] = useState<string | null>(null);
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const userInputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const TOTAL_ROUNDS = 5;
   const { history, saveDebate } = useDebateHistory(session?.user?.id);
 
@@ -57,6 +66,166 @@ export function DebateArena() {
     '远程办公是未来趋势吗？',
   ];
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamState.currentContent, waitingForUser]);
+
+  // Auto-focus user input when waiting
+  useEffect(() => {
+    if (waitingForUser && userInputRef.current) {
+      userInputRef.current.focus();
+    }
+  }, [waitingForUser]);
+
+  const handleSSEEvent = useCallback((event: string, data: string) => {
+    try {
+      const parsed = JSON.parse(data);
+
+      switch (event) {
+        case 'init':
+          if (parsed.opponentProfile) {
+            const op = parsed.opponentProfile as OpponentProfile;
+            setOpponent(op);
+            opponentRef.current = op;
+            setDebateId(parsed.id);
+          }
+          break;
+
+        case 'start':
+          if (parsed.role === 'opponent') {
+            setCurrentRound((prev) => prev + 1);
+          }
+          setStreamState({
+            isStreaming: true,
+            currentRole: parsed.role,
+            currentContent: '',
+          });
+          break;
+
+        case 'chunk':
+          setStreamState((prev) => ({
+            ...prev,
+            currentContent: prev.currentContent + parsed.content,
+          }));
+          break;
+
+        case 'message':
+          setMessages((prev) => [...prev, parsed as DebateMessage]);
+          setStreamState({
+            isStreaming: true,
+            currentRole: null,
+            currentContent: '',
+          });
+          break;
+
+        case 'waiting_for_user':
+          setWaitingForUser(true);
+          setCurrentRound(parsed.round || 0);
+          setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
+          break;
+
+        case 'synthesizing':
+          setIsSynthesizing(true);
+          break;
+
+        case 'synthesis':
+          setIsSynthesizing(false);
+          setSynthesis(parsed as DebateSynthesis);
+          break;
+
+        case 'done':
+          if (parsed.messages) {
+            const opponentProfile = opponentRef.current;
+            if (opponentProfile) {
+              const completedDebate: DebateSession = {
+                id: parsed.id || debateId || `debate-${Date.now()}`,
+                topic: parsed.topic || topic.trim(),
+                userProfile: {
+                  id: session?.user?.id || '',
+                  name: session?.user?.name || '我',
+                  avatar: session?.user?.image,
+                  bio: session?.user?.bio,
+                },
+                opponentProfile,
+                messages: parsed.messages,
+                synthesis: parsed.synthesis,
+                status: 'completed',
+                createdAt: Date.now(),
+              };
+              saveDebate(completedDebate);
+            }
+          }
+          setWaitingForUser(false);
+          setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
+          break;
+
+        case 'error':
+          setError(parsed.message || '发生错误');
+          setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
+          break;
+
+        default:
+          // Legacy event handling for non-typed events (agent-vs-agent / agent-vs-user-agent)
+          if (parsed.opponentProfile) {
+            const op = parsed.opponentProfile as OpponentProfile;
+            setOpponent(op);
+            opponentRef.current = op;
+            setDebateId(parsed.id);
+          } else if (parsed.role && parsed.name && !parsed.content && !parsed.timestamp) {
+            if (parsed.role === 'opponent') {
+              setCurrentRound((prev) => prev + 1);
+            }
+            setStreamState({
+              isStreaming: true,
+              currentRole: parsed.role,
+              currentContent: '',
+            });
+          } else if (parsed.role && parsed.content && !parsed.timestamp) {
+            setStreamState((prev) => ({
+              ...prev,
+              currentContent: prev.currentContent + parsed.content,
+            }));
+          } else if (parsed.timestamp) {
+            setMessages((prev) => [...prev, parsed as DebateMessage]);
+            setStreamState({
+              isStreaming: true,
+              currentRole: null,
+              currentContent: '',
+            });
+          } else if ('consensus' in parsed && !parsed.messages) {
+            setIsSynthesizing(false);
+            setSynthesis(parsed as DebateSynthesis);
+          } else if (Object.keys(parsed).length === 0) {
+            setIsSynthesizing(true);
+          } else if (parsed.messages) {
+            const opponentProfile = opponentRef.current;
+            if (opponentProfile) {
+              const completedDebate: DebateSession = {
+                id: parsed.id || debateId || `debate-${Date.now()}`,
+                topic: topic.trim(),
+                userProfile: {
+                  id: session?.user?.id || '',
+                  name: session?.user?.name || '我',
+                  avatar: session?.user?.image,
+                  bio: session?.user?.bio,
+                },
+                opponentProfile,
+                messages: parsed.messages,
+                synthesis: parsed.synthesis,
+                status: 'completed',
+                createdAt: Date.now(),
+              };
+              saveDebate(completedDebate);
+            }
+          }
+          break;
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, [debateId, topic, session, saveDebate]);
+
   const cancelDebate = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -64,6 +233,8 @@ export function DebateArena() {
     }
     setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
     setIsSynthesizing(false);
+    setWaitingForUser(false);
+    setDebateId(null);
   }, []);
 
   const startDebate = useCallback(async () => {
@@ -78,6 +249,9 @@ export function DebateArena() {
     setShowReport(false);
     setCurrentRound(0);
     setIsSynthesizing(false);
+    setWaitingForUser(false);
+    setDebateId(null);
+    setUserInput('');
     setStreamState({ isStreaming: true, currentRole: null, currentContent: '' });
 
     if (abortControllerRef.current) {
@@ -107,95 +281,66 @@ export function DebateArena() {
         throw new Error('辩论生成失败');
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('无法读取响应');
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let debateId = '';
-      let streamOpponent: OpponentProfile | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('event: ')) continue;
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            try {
-              const parsed = JSON.parse(data);
-
-              if (parsed.opponentProfile) {
-                streamOpponent = parsed.opponentProfile as OpponentProfile;
-                setOpponent(streamOpponent);
-                opponentRef.current = streamOpponent;
-                debateId = parsed.id;
-              } else if (parsed.role && parsed.name && !parsed.content && !parsed.timestamp) {
-                if (parsed.role === 'opponent') {
-                  setCurrentRound((prev) => prev + 1);
-                }
-                setStreamState({
-                  isStreaming: true,
-                  currentRole: parsed.role,
-                  currentContent: '',
-                });
-              } else if (parsed.role && parsed.content && !parsed.timestamp) {
-                setStreamState((prev) => ({
-                  ...prev,
-                  currentContent: prev.currentContent + parsed.content,
-                }));
-              } else if (parsed.timestamp) {
-                setMessages((prev) => [...prev, parsed as DebateMessage]);
-                setStreamState({
-                  isStreaming: true,
-                  currentRole: null,
-                  currentContent: '',
-                });
-              } else if ('consensus' in parsed && !parsed.messages) {
-                setIsSynthesizing(false);
-                setSynthesis(parsed as DebateSynthesis);
-              } else if (Object.keys(parsed).length === 0) {
-                setIsSynthesizing(true);
-              } else if (parsed.messages) {
-                const opponentProfile = streamOpponent || opponentRef.current;
-                if (!opponentProfile) throw new Error('Missing opponent profile');
-
-                const completedDebate: DebateSession = {
-                  id: debateId || `debate-${Date.now()}`,
-                  topic: topic.trim(),
-                  userProfile: {
-                    id: session.user.id!,
-                    name: session.user.name!,
-                    avatar: session.user.image,
-                    bio: session.user.bio,
-                  },
-                  opponentProfile,
-                  messages: parsed.messages,
-                  synthesis: parsed.synthesis,
-                  status: 'completed',
-                  createdAt: Date.now(),
-                };
-                saveDebate(completedDebate);
-              }
-            } catch {
-              // ignore parse errors
-            }
-          }
-        }
-      }
+      await consumeSSEStream(response, handleSSEEvent);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : '发生未知错误');
     } finally {
-      setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
+      // Don't reset streaming state — event handlers already manage it.
+      // For agent-vs-user mode, waitingForUser is set by the event handler
+      // before this finally runs, so we must not blindly reset.
       setIsSynthesizing(false);
     }
-  }, [topic, session, saveDebate, selectedOpponentId, mode]);
+  }, [topic, session, saveDebate, selectedOpponentId, mode, handleSSEEvent]);
+
+  const submitUserReply = useCallback(async () => {
+    if (!userInput.trim() || !debateId || isSubmittingReply) return;
+    if (!session?.user) { openLoginModal(); return; }
+
+    setIsSubmittingReply(true);
+    setWaitingForUser(false);
+    setError(null);
+    setStreamState({ isStreaming: true, currentRole: null, currentContent: '' });
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
+    const replyContent = userInput.trim();
+    setUserInput('');
+
+    try {
+      const response = await fetch('/api/debate/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          debateId,
+          content: replyContent,
+        }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || '回复失败');
+      }
+
+      await consumeSSEStream(response, handleSSEEvent);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : '发生未知错误');
+      setWaitingForUser(true); // Let user retry
+    } finally {
+      setIsSubmittingReply(false);
+      setStreamState((prev) => {
+        if (prev.isStreaming) {
+          return { isStreaming: false, currentRole: null, currentContent: '' };
+        }
+        return prev;
+      });
+    }
+  }, [userInput, debateId, isSubmittingReply, session, handleSSEEvent]);
 
   const loadHistoryDebate = useCallback((historicalDebate: DebateSession) => {
     setMessages(historicalDebate.messages);
@@ -207,9 +352,11 @@ export function DebateArena() {
     setShowReport(false);
     setCurrentRound(TOTAL_ROUNDS);
     setIsSynthesizing(false);
+    setWaitingForUser(false);
+    setDebateId(null);
   }, []);
 
-  const isLoading = streamState.isStreaming;
+  const isLoading = streamState.isStreaming || isSubmittingReply;
   const displayMessages = streamState.currentRole && streamState.currentContent
     ? [
       ...messages,
@@ -223,7 +370,7 @@ export function DebateArena() {
     : messages;
 
   const showTypingIndicator = isLoading && streamState.currentRole !== null && !streamState.currentContent;
-  const debateStarted = (displayMessages.length > 0 || isLoading) && opponent;
+  const debateStarted = (displayMessages.length > 0 || isLoading || waitingForUser) && opponent;
 
   return (
     <div className="max-w-[1000px] mx-auto flex gap-5">
@@ -269,10 +416,10 @@ export function DebateArena() {
               onChange={(e) => setTopic(e.target.value)}
               placeholder="输入一个有争议的话题..."
               className="flex-1 px-3 py-2 bg-[var(--zh-bg)] border border-transparent rounded text-[14px] text-[var(--zh-text-main)] placeholder-[var(--zh-text-gray)] outline-none focus:bg-white focus:border-[var(--zh-text-gray)] transition-all"
-              onKeyDown={(e) => e.key === 'Enter' && !isLoading && startDebate()}
-              disabled={isLoading}
+              onKeyDown={(e) => e.key === 'Enter' && !isLoading && !waitingForUser && startDebate()}
+              disabled={isLoading || waitingForUser}
             />
-            {isLoading ? (
+            {isLoading && !waitingForUser ? (
               <button
                 onClick={cancelDebate}
                 className="px-4 py-2 bg-[var(--zh-red)] text-white rounded text-[14px] font-medium hover:bg-red-700 transition-colors"
@@ -282,10 +429,10 @@ export function DebateArena() {
             ) : (
               <button
                 onClick={startDebate}
-                disabled={!topic.trim()}
+                disabled={!topic.trim() || waitingForUser}
                 className="px-4 py-2 bg-[var(--zh-blue)] text-white rounded text-[14px] font-medium hover:bg-[var(--zh-blue-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                开始辩论
+                {waitingForUser ? '辩论进行中' : '开始辩论'}
               </button>
             )}
           </div>
@@ -369,13 +516,15 @@ export function DebateArena() {
                     {mode === 'agent-vs-user' ? (session?.user?.name || '我') : `${session?.user?.name || '我'} 的 Agent`}
                   </span>
                 </div>
-                {isLoading && (
+                {(isLoading || waitingForUser) && (
                   <div className="flex items-center gap-2 text-[13px] text-[var(--zh-text-gray)]">
                     {isSynthesizing ? (
                       <span className="flex items-center gap-1.5">
                         <span className="animate-spin rounded-full h-3.5 w-3.5 border border-[var(--zh-blue)] border-t-transparent" />
                         生成报告中
                       </span>
+                    ) : waitingForUser ? (
+                      <span className="text-[var(--zh-blue)] font-medium">轮到你发言</span>
                     ) : (
                       <span>第 {currentRound}/{TOTAL_ROUNDS} 轮</span>
                     )}
@@ -384,7 +533,7 @@ export function DebateArena() {
               </div>
 
               {/* Progress bar */}
-              {isLoading && (
+              {(isLoading || waitingForUser) && (
                 <div className="mt-3 h-1 bg-[var(--zh-bg)] rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${isSynthesizing ? 'bg-[var(--zh-blue)] animate-pulse' : 'bg-[var(--zh-blue)]'}`}
@@ -449,12 +598,62 @@ export function DebateArena() {
                     </div>
                   </div>
                 )}
+
+                {/* User Input Area for agent-vs-user mode */}
+                {waitingForUser && mode === 'agent-vs-user' && (
+                  <div className="bg-white rounded-[2px] border-2 border-[var(--zh-blue)] p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-6 h-6 rounded-full bg-[var(--zh-blue-light)] flex items-center justify-center text-[11px] font-bold text-[var(--zh-blue)]">
+                        {(session?.user?.name || '我').charAt(0)}
+                      </span>
+                      <span className="text-[14px] font-medium text-[var(--zh-text-main)]">
+                        轮到你发言（第 {currentRound + 1}/{TOTAL_ROUNDS} 轮）
+                      </span>
+                    </div>
+                    <textarea
+                      ref={userInputRef}
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                          e.preventDefault();
+                          submitUserReply();
+                        }
+                      }}
+                      placeholder="输入你的论点，反驳对方的观点..."
+                      className="w-full min-h-[120px] px-3 py-2 bg-[var(--zh-bg)] border border-transparent rounded text-[14px] text-[var(--zh-text-main)] placeholder-[var(--zh-text-gray)] outline-none focus:bg-white focus:border-[var(--zh-blue)] transition-all resize-y"
+                      disabled={isSubmittingReply}
+                    />
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-[12px] text-[var(--zh-text-gray)]">
+                        Ctrl + Enter 发送
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={cancelDebate}
+                          className="px-3 py-1.5 text-[13px] text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)] transition-colors"
+                        >
+                          结束辩论
+                        </button>
+                        <button
+                          onClick={submitUserReply}
+                          disabled={!userInput.trim() || isSubmittingReply}
+                          className="px-4 py-1.5 bg-[var(--zh-blue)] text-white rounded text-[13px] font-medium hover:bg-[var(--zh-blue-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {isSubmittingReply ? '发送中...' : '发表观点'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
               </div>
             ) : (
               synthesis && (
                 <SynthesisReport
                   synthesis={synthesis}
-                  userName={session?.user?.name || '我的Agent'}
+                  userName={mode === 'agent-vs-user' ? (session?.user?.name || '我') : (session?.user?.name || '我的Agent')}
                   opponentName={opponent.name}
                 />
               )
@@ -470,7 +669,10 @@ export function DebateArena() {
         <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
           <h3 className="text-[15px] font-semibold text-[var(--zh-text-main)] mb-2">关于辩论</h3>
           <p className="text-[13px] text-[var(--zh-text-gray)] leading-relaxed">
-            选择一个有争议的话题，AI 专家会从不同立场展开 {TOTAL_ROUNDS} 轮激烈辩论，最终生成认知报告。
+            {mode === 'agent-vs-user'
+              ? `你将亲自下场，与 AI 专家展开 ${TOTAL_ROUNDS} 轮辩论。对手先发言，然后你回复，最终生成认知报告。`
+              : `选择一个有争议的话题，AI 专家会从不同立场展开 ${TOTAL_ROUNDS} 轮激烈辩论，最终生成认知报告。`
+            }
           </p>
         </div>
 
