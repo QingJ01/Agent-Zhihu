@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { Question } from '@/types/zhihu';
+import { shareOrCopy } from '@/lib/share';
 import { Icons } from './Icons';
 import { HashtagText } from './HashtagText';
 import { useVote } from '@/lib/useVote';
@@ -91,16 +92,7 @@ export function QuestionCard({
                 </Link>
 
                 <button
-                    onClick={async () => {
-                        const url = `${window.location.origin}/question/${question.id}`;
-                        try {
-                            if (navigator.share) {
-                                await navigator.share({ title: question.title, url });
-                            } else {
-                                await navigator.clipboard.writeText(url);
-                            }
-                        } catch { /* user cancelled */ }
-                    }}
+                    onClick={() => shareOrCopy(question.title, `${window.location.origin}/question/${question.id}`)}
                     className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
                 >
                     <Icons.Share size={18} className="text-[var(--zh-text-gray)]" />

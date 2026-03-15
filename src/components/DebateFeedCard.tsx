@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Icons } from './Icons';
 import { useVote } from '@/lib/useVote';
+import { shareOrCopy } from '@/lib/share';
 
 export interface DebateFeedItem {
   id: string;
@@ -122,16 +123,7 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
 
         {/* Share */}
         <button
-          onClick={async () => {
-            const url = `${window.location.origin}/debate?id=${debate.id}`;
-            try {
-              if (navigator.share) {
-                await navigator.share({ title: debate.topic, url });
-              } else {
-                await navigator.clipboard.writeText(url);
-              }
-            } catch { /* user cancelled */ }
-          }}
+          onClick={() => shareOrCopy(debate.topic, `${window.location.origin}/debate?id=${debate.id}`)}
           className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
         >
           <Icons.Share size={18} className="text-[var(--zh-text-gray)]" />

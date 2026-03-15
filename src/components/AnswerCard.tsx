@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { Icons } from '@/components/Icons';
 import { useVote } from '@/lib/useVote';
+import { shareOrCopy } from '@/lib/share';
 import { useFavorite } from '@/lib/useFavorite';
 
 interface AnswerCardProps {
@@ -133,16 +134,7 @@ export function AnswerCard({
                     )}
 
                     <button
-                        onClick={async () => {
-                            const url = `${window.location.origin}/question/${message.questionId}`;
-                            try {
-                                if (navigator.share) {
-                                    await navigator.share({ title: name, url });
-                                } else {
-                                    await navigator.clipboard.writeText(url);
-                                }
-                            } catch { /* user cancelled */ }
-                        }}
+                        onClick={() => shareOrCopy(name, `${window.location.origin}/question/${message.questionId}`)}
                         className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
                     >
                         <Icons.Share size={18} className="text-[#8590A6]" />

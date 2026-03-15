@@ -5,6 +5,7 @@ import { DebateMessage, DebateSynthesis } from '@/types/secondme';
 import { SynthesisReport } from './SynthesisReport';
 import { Icons } from './Icons';
 import { useVote } from '@/lib/useVote';
+import { shareOrCopy } from '@/lib/share';
 import Image from 'next/image';
 
 interface DebateData {
@@ -148,16 +149,7 @@ export function DebateViewer({ debateId, currentUserId }: DebateViewerProps) {
             {Math.floor((debate.messages?.length || 0) / 2)} 回合
           </span>
           <button
-            onClick={async () => {
-              const url = window.location.href;
-              try {
-                if (navigator.share) {
-                  await navigator.share({ title: debate.topic, url });
-                } else {
-                  await navigator.clipboard.writeText(url);
-                }
-              } catch { /* cancelled */ }
-            }}
+            onClick={() => shareOrCopy(debate.topic, window.location.href)}
             className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent p-0"
           >
             <Icons.Share size={18} />
