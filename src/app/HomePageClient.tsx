@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import { Question } from '@/types/zhihu';
 import { QuestionCard } from '@/components/QuestionCard';
+import { DebateFeedCard, DebateFeedItem } from '@/components/DebateFeedCard';
 import { HotList } from '@/components/HotList';
 import { TagCloud } from '@/components/TagCloud';
 import { CreatorCenter } from '@/components/CreatorCenter';
@@ -14,6 +15,9 @@ import { openLoginModal } from '@/lib/loginModal';
 
 type TabType = 'recommend' | 'hot' | 'new';
 type QuestionWithCount = Question & { messageCount?: number; isFavorited?: boolean };
+type FeedItem =
+  | (QuestionWithCount & { type: 'question' })
+  | DebateFeedItem;
 
 function extractTagsFromText(text: string): string[] {
   const matches = [...text.matchAll(/#([\u4e00-\u9fa5A-Za-z0-9_-]{1,12})/g)];
@@ -54,6 +58,7 @@ function buildQuestionFromInput(content: string, author: { id: string; name: str
 export default function Home() {
   const { data: session } = useSession();
   const [questions, setQuestions] = useState<QuestionWithCount[]>([]);
+  const [debates, setDebates] = useState<DebateFeedItem[]>([]);
   const [questionFavorites, setQuestionFavorites] = useState<Record<string, boolean>>({});
   const [userQuestionTitle, setUserQuestionTitle] = useState('');
   const [userQuestionInput, setUserQuestionInput] = useState('');
@@ -92,12 +97,26 @@ export default function Home() {
     }
   }, []);
 
+  const loadDebatesFromServer = useCallback(async () => {
+    try {
+      const response = await fetch('/api/debate/feed?limit=20');
+      if (response.ok) {
+        const debateItems: DebateFeedItem[] = await response.json();
+        setDebates(debateItems);
+      }
+    } catch (error) {
+      console.error('Failed to load debates for feed:', error);
+    }
+  }, []);
+
   // 初始加载：优先从服务器加载
   useEffect(() => {
     loadQuestionsFromServer(searchQuery);
+    loadDebatesFromServer();
 
     const onStoreUpdated = () => {
       loadQuestionsFromServer(searchQuery);
+      loadDebatesFromServer();
     };
 
     window.addEventListener('agent-zhihu-store-updated', onStoreUpdated);
@@ -105,13 +124,14 @@ export default function Home() {
     // 自动轮询：每30秒从服务器刷新一次
     const pollInterval = setInterval(() => {
       loadQuestionsFromServer(searchQuery);
+      loadDebatesFromServer();
     }, 30000); // 30秒
 
     return () => {
       window.removeEventListener('agent-zhihu-store-updated', onStoreUpdated);
       clearInterval(pollInterval);
     };
-  }, [loadQuestionsFromServer, searchQuery]);
+  }, [loadQuestionsFromServer, loadDebatesFromServer, searchQuery]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -142,31 +162,38 @@ export default function Home() {
     return Object.entries(counts).map(([name, count]) => ({ name, count }));
   }, [questions]);
 
-  // 排序后的问题列表
-  const sortedQuestions = useMemo(() => {
-    const filtered = filterTag
+  // 合并问题和辩论到统一 Feed
+  const sortedFeed = useMemo(() => {
+    const filteredQuestions: FeedItem[] = (filterTag
       ? (questions || []).filter((q: QuestionWithCount) => q.tags?.includes(filterTag))
-      : (questions || []);
+      : (questions || [])
+    ).map((q) => ({ ...q, type: 'question' as const }));
+
+    // 搜索或标签筛选时不显示辩论
+    const debateItems: FeedItem[] = (filterTag || searchQuery.trim()) ? [] : debates;
+
+    const allItems = [...filteredQuestions, ...debateItems];
 
     switch (activeTab) {
       case 'hot':
-        return [...filtered].sort((a, b) =>
-          ((b.upvotes || 0) * 2 + (b.messageCount || 0)) -
-          ((a.upvotes || 0) * 2 + (a.messageCount || 0))
-        );
+        return allItems.sort((a, b) => {
+          const heatA = a.type === 'question' ? (a.upvotes || 0) * 2 + (a.messageCount || 0) : a.roundCount * 3;
+          const heatB = b.type === 'question' ? (b.upvotes || 0) * 2 + (b.messageCount || 0) : b.roundCount * 3;
+          return heatB - heatA;
+        });
       case 'new':
-        return [...filtered].sort((a, b) => b.createdAt - a.createdAt);
+        return allItems.sort((a, b) => b.createdAt - a.createdAt);
       default:
         // recommend: 混合热度和新鲜度
-        return [...filtered].sort((a, b) => {
-          const heatA = (a.upvotes || 0) * 2 + (a.messageCount || 0);
-          const heatB = (b.upvotes || 0) * 2 + (b.messageCount || 0);
-          const ageA = (Date.now() - a.createdAt) / 3600000; // 小时
+        return allItems.sort((a, b) => {
+          const heatA = a.type === 'question' ? (a.upvotes || 0) * 2 + (a.messageCount || 0) : a.roundCount * 3;
+          const heatB = b.type === 'question' ? (b.upvotes || 0) * 2 + (b.messageCount || 0) : b.roundCount * 3;
+          const ageA = (Date.now() - a.createdAt) / 3600000;
           const ageB = (Date.now() - b.createdAt) / 3600000;
           return (heatB / (ageB + 1)) - (heatA / (ageA + 1));
         });
     }
-  }, [questions, activeTab, filterTag]);
+  }, [questions, debates, activeTab, filterTag, searchQuery]);
 
   const handleQuestionLikeChange = useCallback(
     (questionId: string, payload: { liked: boolean; downvoted: boolean; upvotes: number; downvotes: number }) => {
@@ -199,6 +226,18 @@ export default function Home() {
       [questionId]: favorited,
     }));
   }, []);
+
+  const handleDebateVoteChange = useCallback(
+    (debateId: string, payload: { liked: boolean; downvoted: boolean; upvotes: number; downvotes: number }) => {
+      setDebates((prev) =>
+        prev.map((d) => {
+          if (d.id !== debateId) return d;
+          return { ...d, ...payload };
+        })
+      );
+    },
+    []
+  );
 
   const submitUserQuestion = useCallback(async () => {
     if (!session?.user?.id || !session.user.name || !userQuestionInput.trim() || isSubmittingUserQuestion) return;
@@ -601,32 +640,41 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Questions List - Unified Feed Card */}
+            {/* Unified Feed */}
             <div className="bg-white rounded-[2px] shadow-sm border border-[var(--zh-border)]">
-              {sortedQuestions.length === 0 ? (
+              {sortedFeed.length === 0 ? (
                 <div className="text-center py-20 text-[var(--zh-text-gray)]">
                   <p className="text-[15px]">还没有相关内容</p>
                 </div>
               ) : (
                 <div>
-                  {sortedQuestions.map((question: QuestionWithCount) => (
-                    <div key={question.id} id={`question-${question.id}`}>
-                      <QuestionCard
-                        question={question}
+                  {sortedFeed.map((item: FeedItem) =>
+                    item.type === 'debate' ? (
+                      <DebateFeedCard
+                        key={`debate-${item.id}`}
+                        debate={item}
                         currentUserId={session?.user?.id}
-                        isFavorited={!!questionFavorites[question.id]}
-                      onVoteChange={handleQuestionLikeChange}
-                      onFavoriteChange={handleQuestionFavoriteChange}
-                      onTagClick={(tag) => {
-                        setFilterTag(tag);
-                        setActiveTab('recommend');
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('tag', tag);
-                        window.history.replaceState({}, '', `${url.pathname}${url.search}`);
-                      }}
-                    />
-                    </div>
-                  ))}
+                        onVoteChange={handleDebateVoteChange}
+                      />
+                    ) : (
+                      <div key={item.id} id={`question-${item.id}`}>
+                        <QuestionCard
+                          question={item}
+                          currentUserId={session?.user?.id}
+                          isFavorited={!!questionFavorites[item.id]}
+                          onVoteChange={handleQuestionLikeChange}
+                          onFavoriteChange={handleQuestionFavoriteChange}
+                          onTagClick={(tag) => {
+                            setFilterTag(tag);
+                            setActiveTab('recommend');
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('tag', tag);
+                            window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+                          }}
+                        />
+                      </div>
+                    )
+                  )}
                 </div>
               )}
             </div>
