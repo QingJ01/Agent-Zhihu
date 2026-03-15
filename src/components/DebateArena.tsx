@@ -18,10 +18,10 @@ interface StreamState {
   currentContent: string;
 }
 
-const MODE_OPTIONS: { key: DebateMode; label: string; desc: string }[] = [
+const MODE_OPTIONS: { key: DebateMode; label: string; desc: string; disabled?: boolean }[] = [
   { key: 'agent-vs-agent', label: 'Agent vs Agent', desc: '两个 AI 专家互相辩论' },
   { key: 'agent-vs-user-agent', label: 'Agent vs 你的 Agent', desc: '你的 AI 分身代你出战' },
-  { key: 'agent-vs-user', label: 'Agent vs 你', desc: '你亲自下场和 AI 辩论' },
+  { key: 'agent-vs-user', label: 'Agent vs 你', desc: '你亲自下场和 AI 辩论（即将上线）', disabled: true },
 ];
 
 export function DebateArena() {
@@ -42,7 +42,6 @@ export function DebateArena() {
   const [showHistory, setShowHistory] = useState(false);
   const [currentRound, setCurrentRound] = useState(0);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
-  const [userInput, setUserInput] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
   const opponentRef = useRef<OpponentProfile | null>(null);
 
@@ -236,15 +235,18 @@ export function DebateArena() {
             {MODE_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
-                onClick={() => !isLoading && setMode(opt.key)}
-                disabled={isLoading}
+                onClick={() => !isLoading && !opt.disabled && setMode(opt.key)}
+                disabled={isLoading || opt.disabled}
                 className={`flex-1 py-3 text-[14px] font-medium transition-colors relative ${
-                  mode === opt.key
-                    ? 'text-[var(--zh-blue)]'
-                    : 'text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)]'
+                  opt.disabled
+                    ? 'text-[var(--zh-text-gray)] opacity-50 cursor-not-allowed'
+                    : mode === opt.key
+                      ? 'text-[var(--zh-blue)]'
+                      : 'text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)]'
                 } disabled:cursor-not-allowed`}
               >
                 {opt.label}
+                {opt.disabled && <span className="ml-1 text-[11px] text-[var(--zh-text-gray)]">即将上线</span>}
                 {mode === opt.key && (
                   <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-[var(--zh-blue)] rounded-t" />
                 )}
@@ -458,28 +460,6 @@ export function DebateArena() {
               )
             )}
 
-            {/* User input for agent-vs-user mode */}
-            {mode === 'agent-vs-user' && isLoading && streamState.currentRole === null && !isSynthesizing && (
-              <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-                <p className="text-[13px] text-[var(--zh-text-gray)] mb-2">轮到你发言了：</p>
-                <div className="flex gap-2">
-                  <textarea
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    placeholder="输入你的观点..."
-                    className="flex-1 px-3 py-2 bg-[var(--zh-bg)] border border-transparent rounded text-[14px] text-[var(--zh-text-main)] placeholder-[var(--zh-text-gray)] outline-none focus:bg-white focus:border-[var(--zh-text-gray)] transition-all resize-none"
-                    rows={3}
-                  />
-                  <button
-                    onClick={() => {/* TODO: submit user reply */}}
-                    disabled={!userInput.trim()}
-                    className="self-end px-4 py-2 bg-[var(--zh-blue)] text-white rounded text-[14px] font-medium hover:bg-[var(--zh-blue-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    发送
-                  </button>
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>

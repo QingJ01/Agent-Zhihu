@@ -2,7 +2,8 @@ import { useCallback, useState } from 'react';
 import Image from 'next/image';
 import { DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { Icons } from '@/components/Icons';
-import { openLoginModal } from '@/lib/loginModal';
+import { useVote } from '@/lib/useVote';
+import { useFavorite } from '@/lib/useFavorite';
 
 interface AnswerCardProps {
     message: DiscussionMessage;
@@ -25,7 +26,9 @@ export function AnswerCard({
     onVoteChange,
     onFavoriteChange,
 }: AnswerCardProps) {
-    const [isVoting, setIsVoting] = useState(false);
+    const { isVoting, vote } = useVote(message.id, 'message', currentUserId, onVoteChange);
+    const { toggleFavorite } = useFavorite(message.id, 'message', currentUserId, onFavoriteChange);
+
     const likeCount = message.upvotes || 0;
     const downvoteCount = message.downvotes || 0;
 
@@ -47,68 +50,6 @@ export function AnswerCard({
 
     const liked = !!currentUserId && (message.likedBy || []).includes(currentUserId);
     const downvoted = !!currentUserId && (message.dislikedBy || []).includes(currentUserId);
-
-    const handleVote = useCallback(async (voteType: 'up' | 'down') => {
-        if (isTyping || isVoting) return;
-        if (!currentUserId) {
-            openLoginModal();
-            return;
-        }
-
-        setIsVoting(true);
-        try {
-            const response = await fetch('/api/likes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetId: message.id, targetType: 'message', voteType }),
-            });
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => null);
-                throw new Error(data?.error || (voteType === 'up' ? '点赞失败' : '反对失败'));
-            }
-
-            const result = await response.json();
-            onVoteChange?.(message.id, {
-                liked: !!result.liked,
-                downvoted: !!result.downvoted,
-                upvotes: Number(result.upvotes) || 0,
-                downvotes: Number(result.downvotes) || 0,
-            });
-        } catch (error) {
-            console.error('Message vote failed:', error);
-        } finally {
-            setIsVoting(false);
-        }
-    }, [currentUserId, isTyping, isVoting, message.id, onVoteChange]);
-
-    const handleFavorite = useCallback(async () => {
-        if (isTyping) return;
-        if (!currentUserId) {
-            openLoginModal();
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/favorites', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetId: message.id, targetType: 'message' }),
-            });
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => null);
-                throw new Error(data?.error || '收藏失败');
-            }
-
-            const result = await response.json();
-            onFavoriteChange?.(message.id, !!result.favorited);
-        } catch (error) {
-            console.error('Message favorite failed:', error);
-            window.alert('收藏失败，请稍后再试');
-        }
-    }, [currentUserId, isTyping, message.id, onFavoriteChange]);
-
 
     return (
         <div className="bg-white p-4 md:p-5 border-b border-[var(--zh-border)] last:border-b-0 hover:shadow-[0_1px_3px_rgba(18,18,18,0.1)] transition-shadow">
@@ -160,21 +101,21 @@ export function AnswerCard({
             {/* Bottom Actions */}
             {!isTyping && (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                         <button
-                            onClick={() => handleVote('up')}
+                            onClick={() => vote('up')}
                             disabled={isVoting}
                             aria-label={`赞同${likeCount ? `，当前 ${likeCount} 票` : ''}`}
-                            className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                            className="flex items-center gap-1.5 h-8 px-3 md:px-4 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                         >
                             <Icons.Upvote size={10} filled={liked} />
                             <span>赞同{likeCount ? ` ${likeCount}` : ''}</span>
                         </button>
                         <button
-                            onClick={() => handleVote('down')}
+                            onClick={() => vote('down')}
                             disabled={isVoting}
                             aria-label="反对"
-                            className="flex items-center px-3 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                            className="flex items-center justify-center h-8 w-8 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                             title={`反对 ${downvoteCount}`}
                         >
                             <Icons.Downvote size={10} filled={downvoted} />
@@ -209,7 +150,7 @@ export function AnswerCard({
                     </button>
 
                     <button
-                        onClick={handleFavorite}
+                        onClick={toggleFavorite}
                         className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
                     >
                         <Icons.Favorite size={18} className="text-[#8590A6]" filled={isFavorited} />

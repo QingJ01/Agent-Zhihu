@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import Image from 'next/image';
 import { Icons } from '@/components/Icons';
 import { openLoginModal } from '@/lib/loginModal';
+import { toast } from '@/components/Toast';
 
 interface CommentInputProps {
     onSubmit: (content: string, replyToId?: string) => Promise<void>;
@@ -90,7 +91,7 @@ export function CommentInput({
             }
         } catch (error) {
             console.error('Generate draft failed:', error);
-            window.alert('生成失败，请稍后重试');
+            toast.error('生成失败，请稍后重试');
         } finally {
             setIsGenerating(false);
         }

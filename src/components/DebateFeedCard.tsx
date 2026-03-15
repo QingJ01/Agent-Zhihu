@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from './Icons';
-import { openLoginModal } from '@/lib/loginModal';
+import { useVote } from '@/lib/useVote';
 
 export interface DebateFeedItem {
   id: string;
@@ -30,7 +29,7 @@ interface DebateFeedCardProps {
 }
 
 export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFeedCardProps) {
-  const [isVoting, setIsVoting] = useState(false);
+  const { isVoting, vote } = useVote(debate.id, 'debate', currentUserId, onVoteChange);
 
   const winnerLabel =
     debate.winner === 'user'
@@ -47,41 +46,6 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
       : debate.winner === 'opponent'
         ? 'text-[var(--zh-orange)]'
         : 'text-[var(--zh-text-gray)]';
-
-  const handleVoteClick = useCallback(async (e: React.MouseEvent, voteType: 'up' | 'down') => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!currentUserId || isVoting) {
-      if (!currentUserId) { openLoginModal(); }
-      return;
-    }
-
-    setIsVoting(true);
-    try {
-      const response = await fetch('/api/likes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetId: debate.id, targetType: 'debate', voteType }),
-      });
-
-      if (!response.ok) {
-        throw new Error('操作失败');
-      }
-
-      const result = await response.json();
-      onVoteChange?.(debate.id, {
-        liked: !!result.liked,
-        downvoted: !!result.downvoted,
-        upvotes: Number(result.upvotes) || 0,
-        downvotes: Number(result.downvotes) || 0,
-      });
-    } catch (error) {
-      console.error('Debate vote failed:', error);
-      window.alert('操作失败，请稍后再试');
-    } finally {
-      setIsVoting(false);
-    }
-  }, [currentUserId, isVoting, onVoteChange, debate.id]);
 
   return (
     <div className="p-4 md:p-[20px] bg-white border-b border-[var(--zh-border)] last:border-b-0 hover:shadow-[0_1px_3px_rgba(18,18,18,0.1)] transition-shadow">
@@ -121,21 +85,21 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
       {/* Footer */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
         {/* Vote buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
-            onClick={(e) => handleVoteClick(e, 'up')}
+            onClick={(e) => vote('up', e)}
             disabled={isVoting}
             aria-label={`赞同${debate.upvotes ? `，当前 ${debate.upvotes} 票` : ''}`}
-            className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+            className="flex items-center gap-1.5 h-8 px-3 md:px-4 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
           >
             <Icons.Upvote size={10} filled={debate.liked} />
             <span>赞同{debate.upvotes ? ` ${debate.upvotes}` : ''}</span>
           </button>
           <button
-            onClick={(e) => handleVoteClick(e, 'down')}
+            onClick={(e) => vote('down', e)}
             disabled={isVoting}
             aria-label="反对"
-            className="flex items-center px-3 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+            className="flex items-center justify-center h-8 w-8 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
             title={`反对 ${debate.downvotes || 0}`}
           >
             <Icons.Downvote size={10} filled={debate.downvoted} />

@@ -13,6 +13,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { AI_EXPERTS } from '@/lib/experts';
 import { HashtagText } from '@/components/HashtagText';
 import { openLoginModal } from '@/lib/loginModal';
+import { toast } from '@/components/Toast';
 
 type QuestionWithMeta = Question & { isFavorited?: boolean; messageCount?: number };
 type MessageWithMeta = DiscussionMessage & { isFavorited?: boolean };
@@ -245,7 +246,7 @@ export default function QuestionPage({ params }: PageProps) {
             });
         } catch (error) {
             console.error('Question vote failed:', error);
-            window.alert(voteType === 'up' ? '点赞失败，请稍后再试' : '反对失败，请稍后再试');
+            toast.error(voteType === 'up' ? '点赞失败，请稍后再试' : '反对失败，请稍后再试');
         }
     }, [question, session?.user?.id]);
 
@@ -272,7 +273,7 @@ export default function QuestionPage({ params }: PageProps) {
             setQuestionFavorited(!!result.favorited);
         } catch (error) {
             console.error('Question favorite failed:', error);
-            window.alert('收藏失败，请稍后再试');
+            toast.error('收藏失败，请稍后再试');
         }
     }, [question, session?.user?.id]);
 
@@ -319,7 +320,7 @@ export default function QuestionPage({ params }: PageProps) {
                 return;
             }
             await navigator.clipboard.writeText(url);
-            window.alert('链接已复制');
+            toast.success('链接已复制');
         } catch (error) {
             console.error('Share failed:', error);
         }

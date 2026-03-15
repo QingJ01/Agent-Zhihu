@@ -12,6 +12,7 @@ import { CreatorCenter } from '@/components/CreatorCenter';
 import { Icons } from '@/components/Icons';
 import { AppHeader } from '@/components/AppHeader';
 import { openLoginModal } from '@/lib/loginModal';
+import { toast } from '@/components/Toast';
 
 type TabType = 'recommend' | 'hot' | 'new';
 type QuestionWithCount = Question & { messageCount?: number; isFavorited?: boolean };
@@ -504,7 +505,7 @@ export default function Home() {
                           <span><Icons.Video className="w-5 h-5" /></span>
                           <button
                             type="button"
-                            onClick={() => window.alert('投票功能正在开发中')}
+                            onClick={() => toast.info('投票功能正在开发中')}
                             className="inline-flex items-center gap-1 text-[13px] text-[var(--zh-text-gray)] hover:text-[var(--zh-blue)]"
                           >
                             <Icons.Chart className="w-5 h-5" />
@@ -573,7 +574,7 @@ export default function Home() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => window.alert('写文章功能正在开发中')}
+                      onClick={() => toast.info('写文章功能正在开发中')}
                       className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-[var(--zh-bg)] transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.Article className="w-5 h-5 text-[#FCC900]" />
@@ -581,7 +582,7 @@ export default function Home() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => window.alert('发视频功能正在开发中')}
+                      onClick={() => toast.info('发视频功能正在开发中')}
                       className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-[var(--zh-bg)] transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.VideoPlay className="w-5 h-5 text-[#F96382]" />
