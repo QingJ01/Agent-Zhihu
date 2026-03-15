@@ -157,18 +157,18 @@ export function AnswerCard({
             {/* Bottom Actions */}
             {!isTyping && (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <div className="flex items-center">
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={() => handleVote('up')}
-                            className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-l-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                            className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                         >
                             <Icons.Upvote size={10} filled={liked} />
                             <span>赞同{likeCount ? ` ${likeCount}` : ''}</span>
                         </button>
                         <button
                             onClick={() => handleVote('down')}
+                            className="flex items-center px-3 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                             title={`反对 ${downvoteCount}`}
-                            className="flex items-center px-2.5 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-r-[3px] border-l border-white/60 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                         >
                             <Icons.Downvote size={10} filled={downvoted} />
                         </button>

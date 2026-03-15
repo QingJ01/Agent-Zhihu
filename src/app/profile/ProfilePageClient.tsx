@@ -658,11 +658,11 @@ export default function ProfilePage() {
                             </div>
                           )}
                           <div className="mt-2.5 flex items-center gap-4">
-                            <div className="flex items-center">
+                            <div className="flex items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'up')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors rounded-l-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                               >
                                 <Icons.Upvote size={10} filled={!!item.liked} />
                                 <span>赞同{item.upvotes ? ` ${item.upvotes}` : ''}</span>
@@ -670,7 +670,7 @@ export default function ProfilePage() {
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'down')}
-                                className="flex items-center px-2.5 py-1.5 text-sm font-medium transition-colors rounded-r-[3px] border-l border-white/60 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                                className="flex items-center px-3 py-1.5 text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                                 title={`反对 ${item.downvotes || 0}`}
                               >
                                 <Icons.Downvote size={10} filled={!!item.downvoted} />
@@ -705,11 +705,11 @@ export default function ProfilePage() {
                             </div>
                           )}
                           <div className="mt-2.5 flex items-center gap-4">
-                            <div className="flex items-center">
+                            <div className="flex items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'up')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors rounded-l-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                               >
                                 <Icons.Upvote size={10} filled />
                                 <span>赞同{item.upvotes ? ` ${item.upvotes}` : ''}</span>
@@ -717,7 +717,7 @@ export default function ProfilePage() {
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'down')}
-                                className="flex items-center px-2.5 py-1.5 text-sm font-medium transition-colors rounded-r-[3px] border-l border-white/60 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+                                className="flex items-center px-3 py-1.5 text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
                                 title={`反对 ${item.downvotes || 0}`}
                               >
                                 <Icons.Downvote size={10} filled={!!item.downvoted} />

@@ -121,18 +121,19 @@ export function DebateFeedCard({ debate, currentUserId, onVoteChange }: DebateFe
       {/* Footer */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
         {/* Vote buttons */}
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           <button
             onClick={(e) => handleVoteClick(e, 'up')}
             disabled={isVoting}
-            className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-l-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+            className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
           >
             <Icons.Upvote size={10} filled={debate.liked} />
             <span>赞同{debate.upvotes ? ` ${debate.upvotes}` : ''}</span>
           </button>
           <button
             onClick={(e) => handleVoteClick(e, 'down')}
-            className="flex items-center px-2.5 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-r-[3px] border-l border-white/60 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
+            disabled={isVoting}
+            className="flex items-center px-3 py-1.5 text-xs md:text-sm font-medium transition-colors rounded-[3px] bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[#D6EAFF]"
             title={`反对 ${debate.downvotes || 0}`}
           >
             <Icons.Downvote size={10} filled={debate.downvoted} />
