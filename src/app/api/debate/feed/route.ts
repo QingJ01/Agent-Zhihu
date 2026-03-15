@@ -40,6 +40,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(feedItems);
   } catch (error) {
     console.error('Failed to fetch debate feed:', error);
-    return NextResponse.json([], { status: 200 });
+    return NextResponse.json({ error: 'Failed to fetch debate feed' }, { status: 500 });
   }
 }

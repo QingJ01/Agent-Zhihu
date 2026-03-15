@@ -442,6 +442,7 @@ export async function GET(request: NextRequest) {
             await connectDB();
             const questions = await QuestionModel.find()
                 .sort({ createdAt: -1 })
+                .skip(offset)
                 .limit(limit)
                 .lean();
 
@@ -709,7 +710,12 @@ export async function GET(request: NextRequest) {
             return NextResponse.json(payload, { headers });
         }
 
-        // 默认：生成新问题
+        // 默认：生成新问题（需要认证）
+        const genSession = await getServerSession(authOptions);
+        if (!genSession?.user?.id) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         let recentTitles: string[] = [];
         try {
             await connectDB();
@@ -816,23 +822,27 @@ export async function POST(request: NextRequest) {
                     // 连接数据库
                     await connectDB();
 
-                    // 保存或更新问题到数据库
+                    // 保存或更新问题到数据库（忽略客户端传入的投票字段）
                     await QuestionModel.findOneAndUpdate(
                         { id: question.id },
                         {
-                            id: question.id,
-                            title: question.title,
-                            description: question.description,
-                            tags: question.tags || [],
-                            author: (isUserTriggered ? sessionAuthor : question.author) || null,
-                            createdBy: isUserTriggered ? 'human' : (question.createdBy || 'system'),
-                            status: question.status || 'discussing',
-                            discussionRounds: question.discussionRounds || 0,
-                            upvotes: question.upvotes || 0,
-                            likedBy: question.likedBy || [],
-                            downvotes: question.downvotes || 0,
-                            dislikedBy: question.dislikedBy || [],
-                            createdAt: question.createdAt || Date.now(),
+                            $set: {
+                                id: question.id,
+                                title: question.title,
+                                description: question.description,
+                                tags: question.tags || [],
+                                author: (isUserTriggered ? sessionAuthor : question.author) || null,
+                                createdBy: isUserTriggered ? 'human' : (question.createdBy || 'system'),
+                                status: question.status || 'discussing',
+                            },
+                            $setOnInsert: {
+                                upvotes: 0,
+                                likedBy: [],
+                                downvotes: 0,
+                                dislikedBy: [],
+                                discussionRounds: 0,
+                                createdAt: question.createdAt || Date.now(),
+                            },
                         },
                         { upsert: true, returnDocument: 'after' }
                     );
@@ -940,7 +950,7 @@ export async function POST(request: NextRequest) {
                             userPersonaSnippet || undefined,
                         );
 
-                        // 处理 AI 点赞
+                        // 处理 AI 点赞（同时持久化到数据库）
                         const likesGiven: { messageId: string; by: string }[] = [];
                         for (const likeName of shouldLike) {
                             const targetMsg = allMessages.find((m) => {
@@ -953,6 +963,12 @@ export async function POST(request: NextRequest) {
                                 targetMsg.upvotes = (targetMsg.upvotes || 0) + 1;
                                 targetMsg.likedBy = [...(targetMsg.likedBy || []), expert.id];
                                 likesGiven.push({ messageId: targetMsg.id, by: expert.name });
+
+                                // 持久化 AI 点赞到数据库
+                                await MessageModel.updateOne(
+                                    { id: targetMsg.id },
+                                    { $inc: { upvotes: 1 }, $addToSet: { likedBy: expert.id } }
+                                );
                             }
                         }
 
