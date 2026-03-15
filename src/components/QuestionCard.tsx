@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Question } from '@/types/zhihu';
 import { Icons } from './Icons';
 import { HashtagText } from './HashtagText';
+import { openLoginModal } from '@/lib/loginModal';
 
 interface QuestionCardProps {
     question: Question & { messageCount?: number };
@@ -42,7 +43,7 @@ export function QuestionCard({
         e.preventDefault();
         e.stopPropagation();
         if (!currentUserId || isVoting) {
-            if (!currentUserId) window.alert(voteType === 'up' ? '请先登录后再点赞' : '请先登录后再反对');
+            if (!currentUserId) { openLoginModal(); }
             return;
         }
 
@@ -78,7 +79,7 @@ export function QuestionCard({
         e.preventDefault();
         e.stopPropagation();
         if (!currentUserId || isFavoriting) {
-            if (!currentUserId) window.alert('请先登录后再收藏');
+            if (!currentUserId) { openLoginModal(); }
             return;
         }
 
@@ -134,14 +135,14 @@ export function QuestionCard({
                     <button
                         onClick={(e) => handleVoteClick(e, 'up')}
                         disabled={isVoting}
-                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium transition-colors bg-[rgba(0,102,255,0.1)] text-[var(--zh-blue)] hover:bg-[rgba(0,102,255,0.15)]"
+                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium transition-colors bg-[var(--zh-blue-tint)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
                     >
                         <Icons.Upvote size={12} filled={liked} />
                         <span>{`赞同 ${voteCount}`}</span>
                     </button>
                     <button
                         onClick={(e) => handleVoteClick(e, 'down')}
-                        className="px-2 py-1.5 text-xs md:text-sm font-medium transition-colors ml-[2px] bg-[rgba(0,102,255,0.1)] text-[var(--zh-blue)] hover:bg-[rgba(0,102,255,0.15)]"
+                        className="px-2 py-1.5 text-xs md:text-sm font-medium transition-colors ml-[2px] bg-[var(--zh-blue-tint)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
                         title={`反对 ${downvoteCount}`}
                     >
                         <Icons.Downvote size={12} filled={downvoted} />
@@ -149,7 +150,7 @@ export function QuestionCard({
                 </div>
 
                 <Link href={`/question/${question.id}`} className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors p-0">
-                    <Icons.Comment size={18} className="text-[#8590A6]" />
+                    <Icons.Comment size={18} className="text-[var(--zh-text-gray)]" />
                     <span>{question.messageCount ? `${question.messageCount} 条评论` : '添加评论'}</span>
                 </Link>
 
@@ -163,7 +164,7 @@ export function QuestionCard({
                     }}
                     className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
                 >
-                    <Icons.Share size={18} className="text-[#8590A6]" />
+                    <Icons.Share size={18} className="text-[var(--zh-text-gray)]" />
                     <span>分享</span>
                 </button>
 
@@ -172,7 +173,7 @@ export function QuestionCard({
                     disabled={isFavoriting}
                     className="flex items-center gap-1.5 text-xs md:text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)] transition-colors bg-transparent hover:bg-transparent p-0"
                 >
-                    <Icons.Favorite size={18} className="text-[#8590A6]" filled={isFavorited} />
+                    <Icons.Favorite size={18} className="text-[var(--zh-text-gray)]" filled={isFavorited} />
                     <span>{isFavorited ? '已收藏' : '收藏'}</span>
                 </button>
 

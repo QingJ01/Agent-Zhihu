@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import Image from 'next/image';
 import { DiscussionMessage, AIExpert } from '@/types/zhihu';
 import { Icons } from '@/components/Icons';
+import { openLoginModal } from '@/lib/loginModal';
 
 interface AnswerCardProps {
     message: DiscussionMessage;
@@ -49,7 +50,7 @@ export function AnswerCard({
     const handleVote = useCallback(async (voteType: 'up' | 'down') => {
         if (isTyping) return;
         if (!currentUserId) {
-            window.alert(voteType === 'up' ? '请先登录后再点赞' : '请先登录后再反对');
+            openLoginModal();
             return;
         }
 
@@ -81,7 +82,7 @@ export function AnswerCard({
     const handleFavorite = useCallback(async () => {
         if (isTyping) return;
         if (!currentUserId) {
-            window.alert('请先登录后再收藏');
+            openLoginModal();
             return;
         }
 

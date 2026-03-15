@@ -8,6 +8,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { Icons } from '@/components/Icons';
 import { UserPersona } from '@/types/persona';
 import { PERSONA_EXTRACTION_PROMPT } from '@/lib/persona-prompt';
+import { openLoginModal } from '@/lib/loginModal';
 
 interface ProfileStats {
   questions: number;
@@ -501,8 +502,22 @@ export default function ProfilePage() {
 
   if (!session?.user) {
     return (
-      <div className="min-h-screen bg-[#f6f6f6] flex items-center justify-center">
-        <Link href="/" className="px-6 py-3 bg-[#0066FF] text-white rounded hover:bg-[#005ce6]">返回首页登录</Link>
+      <div className="min-h-screen bg-[var(--zh-bg)] font-sans text-[var(--zh-text-main)]">
+        <AppHeader />
+        <main className="pt-[52px]">
+          <div className="max-w-3xl mx-auto py-20 text-center">
+            <div className="w-24 h-24 mx-auto mb-6 bg-[var(--zh-border)] rounded-[2px] flex items-center justify-center">
+              <Icons.User size={48} className="text-[var(--zh-text-gray)]" />
+            </div>
+            <p className="text-[var(--zh-text-gray)] text-[15px] mb-4">登录后查看你的个人主页</p>
+            <button
+              onClick={openLoginModal}
+              className="px-6 py-2.5 bg-[var(--zh-blue)] text-white rounded-[3px] text-sm font-medium hover:bg-[var(--zh-blue-hover)] transition-colors"
+            >
+              立即登录
+            </button>
+          </div>
+        </main>
       </div>
     );
   }
@@ -511,13 +526,13 @@ export default function ProfilePage() {
   const profileAvatar = editableProfile.avatarUrl || user.image || '';
 
   return (
-    <div className="min-h-screen bg-[#f6f6f6] font-sans text-[#121212]">
+    <div className="min-h-screen bg-[var(--zh-bg)] font-sans text-[var(--zh-text-main)]">
       <AppHeader />
 
       <main className="pt-[52px]">
         <div className="bg-white shadow-sm mb-2.5">
           <div className="relative group/cover">
-            <div className="h-[240px] w-full overflow-hidden bg-gray-100 relative">
+            <div className="h-[240px] w-full overflow-hidden bg-[var(--zh-bg)] relative">
               {editableProfile.coverUrl ? (
                 <Image
                   src={editableProfile.coverUrl}
@@ -552,25 +567,25 @@ export default function ProfilePage() {
                     alt="Avatar"
                     width={160}
                     height={160}
-                    className="w-[160px] h-[160px] rounded-xl bg-white object-cover border-4 border-white"
+                    className="w-[160px] h-[160px] rounded-[2px] bg-white object-cover border-4 border-white"
                     unoptimized
                   />
                 ) : (
-                  <div className="w-[160px] h-[160px] rounded-xl bg-[#f0f2f7] border-4 border-white" />
+                  <div className="w-[160px] h-[160px] rounded-[2px] bg-[#f0f2f7] border-4 border-white" />
                 )}
               </div>
 
               {/* User Info Area */}
               <div className="pl-[184px] pt-4 pb-10 min-h-[100px] flex justify-between items-start">
                 <div className="flex-1 min-w-0 pr-8">
-                  <h1 className="text-[26px] font-bold leading-9 text-[#121212] flex items-center gap-2">
+                  <h1 className="text-[26px] font-bold leading-9 text-[var(--zh-text-main)] flex items-center gap-2">
                     {editableProfile.displayName || user.name}
                   </h1>
 
                   {/* Bio */}
-                  <div className="mt-1.5 text-[15px] text-[#121212] leading-relaxed break-words">
+                  <div className="mt-1.5 text-[15px] text-[var(--zh-text-main)] leading-relaxed break-words">
                     {editableProfile.bio || user.bio || (
-                      <span className="text-[#8590A6]">填写个人简介</span>
+                      <span className="text-[var(--zh-text-gray)]">填写个人简介</span>
                     )}
                   </div>
                 </div>
@@ -578,7 +593,7 @@ export default function ProfilePage() {
                 {/* Edit Profile Button (Main) */}
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="shrink-0 px-5 py-2 border border-[#0066FF] text-[#0066FF] rounded-[4px] font-semibold text-[14px] hover:bg-[#0066FF]/5 transition-colors"
+                  className="shrink-0 px-5 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] rounded-[4px] font-semibold text-[14px] hover:bg-[var(--zh-blue)]/5 transition-colors"
                 >
                   编辑个人资料
                 </button>
@@ -589,8 +604,8 @@ export default function ProfilePage() {
 
         <div className="max-w-[1000px] mx-auto px-0 md:px-0 flex flex-col md:flex-row gap-2.5">
           <div className="flex-[1] min-w-0 bg-white shadow-sm rounded-sm">
-            <div className="border-b border-[#F0F2F7] sticky top-[52px] bg-white z-10">
-              <div className="flex px-5 border-b-[1px] border-[#F0F2F7] -mb-[1px]">
+            <div className="border-b border-[var(--zh-border)] sticky top-[52px] bg-white z-10">
+              <div className="flex px-5 border-b-[1px] border-[var(--zh-border)] -mb-[1px]">
                 {[
                   { key: 'questions' as const, label: '提问', count: stats.questions },
                   { key: 'answers' as const, label: '回答', count: stats.answers },
@@ -601,12 +616,12 @@ export default function ProfilePage() {
                   <button
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key)}
-                    className={`mr-10 py-4 text-[16px] relative transition-colors bg-white ${activeTab === tab.key ? 'text-[#121212] font-semibold' : 'text-[#121212] font-medium'}`}
+                    className={`mr-10 py-4 text-[16px] relative transition-colors bg-white ${activeTab === tab.key ? 'text-[var(--zh-text-main)] font-semibold' : 'text-[var(--zh-text-main)] font-medium'}`}
                   >
                     {tab.label}
-                    <span className="text-[#8590A6] font-normal text-sm ml-1.5">{tab.count}</span>
+                    <span className="text-[var(--zh-text-gray)] font-normal text-sm ml-1.5">{tab.count}</span>
                     {activeTab === tab.key && (
-                      <div className="absolute bottom-0 left-0 w-full h-[3px] bg-[#0066FF] rounded-t-[1px]" />
+                      <div className="absolute bottom-0 left-0 w-full h-[3px] bg-[var(--zh-blue)] rounded-t-[1px]" />
                     )}
                   </button>
                 ))}
@@ -615,30 +630,30 @@ export default function ProfilePage() {
 
             <div>
               <div className="px-5 py-4 border-b border-[#f0f2f7]">
-                <h3 className="font-semibold text-[15px] text-[#121212]">{tabTitle(activeTab)}</h3>
+                <h3 className="font-semibold text-[15px] text-[var(--zh-text-main)]">{tabTitle(activeTab)}</h3>
               </div>
 
               {loading ? (
-                <div className="py-20 flex justify-center text-[#8590A6]">加载中...</div>
+                <div className="py-20 flex justify-center text-[var(--zh-text-gray)]">加载中...</div>
               ) : activity.length > 0 ? (
-                <div className="divide-y divide-[#F0F2F7]">
+                <div className="divide-y divide-[var(--zh-border)]">
                   {activity.map((item, idx) => (
                     <div key={item.id || idx} className="p-5 hover:bg-transparent">
                       {item._type === 'debate' ? (
                         <>
-                          <div className="mb-2 text-[#8590A6] text-[15px] flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-[2px] bg-orange-50 text-orange-600 border border-orange-100">
+                          <div className="mb-2 text-[var(--zh-text-gray)] text-[15px] flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-[2px] bg-[var(--zh-orange-light)] text-[var(--zh-orange)] border border-[var(--zh-orange-border)]">
                               <Icons.Swords size={12} />
                               辩论
                             </span>
                             <span>vs {item.opponentName}</span>
-                            <span className="text-xs text-[#999]">{new Date(item.createdAt || Date.now()).toLocaleDateString()}</span>
+                            <span className="text-xs text-[var(--zh-text-gray)]">{new Date(item.createdAt || Date.now()).toLocaleDateString()}</span>
                           </div>
-                          <h2 className="text-[18px] font-bold text-[#121212] mb-1.5 leading-snug hover:text-[#175199] cursor-pointer transition-colors">
+                          <h2 className="text-[18px] font-bold text-[var(--zh-text-main)] mb-1.5 leading-snug hover:text-[var(--zh-text-link-hover)] cursor-pointer transition-colors">
                             <Link href={`/debate?id=${item.id}`}>{item.topic || '无标题'}</Link>
                           </h2>
                           {item.conclusion && (
-                            <div className="text-[15px] text-[#121212] leading-[1.67] line-clamp-3 mb-2">
+                            <div className="text-[15px] text-[var(--zh-text-main)] leading-[1.67] line-clamp-3 mb-2">
                               {item.conclusion}
                             </div>
                           )}
@@ -647,7 +662,7 @@ export default function ProfilePage() {
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'up')}
-                                className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
                               >
                                 <Icons.Upvote size={11} filled={!!item.liked} />
                                 <span>{item.upvotes || '赞同'}</span>
@@ -655,37 +670,37 @@ export default function ProfilePage() {
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'down')}
-                                className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
+                                className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
                                 title={`反对 ${item.downvotes || 0}`}
                               >
                                 <Icons.Downvote size={11} filled={!!item.downvoted} />
                               </button>
                             </div>
-                            <span className="text-[#8590A6] text-sm flex items-center gap-1.5">
-                              <Icons.Comment size={16} className="text-[#8590A6]" />
+                            <span className="text-[var(--zh-text-gray)] text-sm flex items-center gap-1.5">
+                              <Icons.Comment size={16} className="text-[var(--zh-text-gray)]" />
                               {item.roundCount || 0} 回合
                             </span>
                             {item.winner && (
-                              <span className={`text-sm flex items-center gap-1 ${item.winner === 'user' ? 'text-[#0066FF]' : item.winner === 'opponent' ? 'text-orange-600' : 'text-[#8590A6]'}`}>
+                              <span className={`text-sm flex items-center gap-1 ${item.winner === 'user' ? 'text-[var(--zh-blue)]' : item.winner === 'opponent' ? 'text-[var(--zh-orange)]' : 'text-[var(--zh-text-gray)]'}`}>
                                 {item.winner === 'tie' ? '🤝 平局' : item.winner === 'user' ? '🏆 胜利' : '🎯 落败'}
                               </span>
                             )}
                             {item.status !== 'completed' && (
-                              <span className="text-[#8590A6] text-sm">进行中</span>
+                              <span className="text-[var(--zh-text-gray)] text-sm">进行中</span>
                             )}
                           </div>
                         </>
                       ) : (
                         <>
-                          <div className="mb-2 text-[#8590A6] text-[15px] flex items-center gap-2">
+                          <div className="mb-2 text-[var(--zh-text-gray)] text-[15px] flex items-center gap-2">
                             <span>{item._type === 'answer' ? '回答了问题' : '提出了问题'}</span>
-                            <span className="text-xs text-[#999]">{new Date(item.createdAt || Date.now()).toLocaleDateString()}</span>
+                            <span className="text-xs text-[var(--zh-text-gray)]">{new Date(item.createdAt || Date.now()).toLocaleDateString()}</span>
                           </div>
-                          <h2 className="text-[18px] font-bold text-[#121212] mb-1.5 leading-snug hover:text-[#175199] cursor-pointer transition-colors">
+                          <h2 className="text-[18px] font-bold text-[var(--zh-text-main)] mb-1.5 leading-snug hover:text-[var(--zh-text-link-hover)] cursor-pointer transition-colors">
                             <Link href={`/question/${item.questionId || item.id}`}>{item.title || item.questionTitle || '无标题'}</Link>
                           </h2>
                           {item.content && (
-                            <div className="text-[15px] text-[#121212] leading-[1.67] line-clamp-3 mb-2 cursor-pointer hover:text-[#646464] transition-colors">
+                            <div className="text-[15px] text-[var(--zh-text-main)] leading-[1.67] line-clamp-3 mb-2 cursor-pointer hover:text-[var(--zh-text-secondary)] transition-colors">
                               {item.content.replace(/<[^>]+>/g, '')}
                             </div>
                           )}
@@ -694,7 +709,7 @@ export default function ProfilePage() {
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'up')}
-                                className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-sm font-medium transition-colors bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
                               >
                                 <Icons.Upvote size={11} filled />
                                 <span>{item.upvotes || '赞同'}</span>
@@ -702,7 +717,7 @@ export default function ProfilePage() {
                               <button
                                 type="button"
                                 onClick={() => handleActivityVote(item, 'down')}
-                                className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[#EBF5FF] text-[#0066FF] hover:bg-[#dcecff]"
+                                className="ml-[2px] px-2 py-1 text-sm font-medium transition-colors bg-[var(--zh-blue-light)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue-light)]"
                                 title={`反对 ${item.downvotes || 0}`}
                               >
                                 <Icons.Downvote size={11} filled={!!item.downvoted} />
@@ -711,17 +726,17 @@ export default function ProfilePage() {
                             <button
                               type="button"
                               onClick={() => handleActivityFavorite(item)}
-                              className="text-[#8590A6] text-sm hover:opacity-80 cursor-pointer flex items-center gap-1.5 transition-opacity"
+                              className="text-[var(--zh-text-gray)] text-sm hover:opacity-80 cursor-pointer flex items-center gap-1.5 transition-opacity"
                             >
-                              <Icons.Favorite size={16} className="text-[#8590A6]" />
+                              <Icons.Favorite size={16} className="text-[var(--zh-text-gray)]" />
                               {item.isFavorited ? '已收藏' : '收藏'}
                             </button>
                             <button
                               type="button"
                               onClick={() => handleActivityComment(item)}
-                              className="text-[#8590A6] text-sm hover:opacity-80 cursor-pointer flex items-center gap-1.5 transition-opacity"
+                              className="text-[var(--zh-text-gray)] text-sm hover:opacity-80 cursor-pointer flex items-center gap-1.5 transition-opacity"
                             >
-                              <Icons.Comment size={16} className="text-[#8590A6]" />
+                              <Icons.Comment size={16} className="text-[var(--zh-text-gray)]" />
                               评论
                             </button>
                           </div>
@@ -731,9 +746,9 @@ export default function ProfilePage() {
                   ))}
                 </div>
               ) : (
-                <div className="py-32 flex flex-col items-center justify-center text-[#8590A6] gap-5">
+                <div className="py-32 flex flex-col items-center justify-center text-[var(--zh-text-gray)] gap-5">
                   {/* Empty State Illustration */}
-                  <div className="w-32 h-32 bg-gray-50 rounded-full flex items-center justify-center text-5xl opacity-50">📭</div>
+                  <div className="w-32 h-32 bg-[var(--zh-bg)] rounded-full flex items-center justify-center text-5xl opacity-50">📭</div>
                   <p className="text-[15px]">还没有任何内容</p>
                 </div>
               )}
@@ -742,8 +757,8 @@ export default function ProfilePage() {
 
           <div className="w-full md:w-[296px] shrink-0 space-y-2.5">
             <div className="bg-white shadow-sm rounded-sm p-0 overflow-hidden">
-              <div className="px-5 py-4 border-b border-[#F0F2F7]">
-                <h3 className="font-semibold text-[15px] text-[#121212]">个人成就</h3>
+              <div className="px-5 py-4 border-b border-[var(--zh-border)]">
+                <h3 className="font-semibold text-[15px] text-[var(--zh-text-main)]">个人成就</h3>
               </div>
               <div className="py-2">
                 {[
@@ -753,23 +768,23 @@ export default function ProfilePage() {
                   { label: '提出问题', value: stats.questions, icon: '❓' },
                   { label: '参与辩论', value: stats.debates, icon: '⚔️' },
                 ].map((stat) => (
-                  <div key={stat.label} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer">
-                    <div className="flex items-center gap-3 text-[#646464] text-[14px]">
+                  <div key={stat.label} className="px-5 py-3 flex items-center justify-between hover:bg-[var(--zh-bg)] transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3 text-[var(--zh-text-secondary)] text-[14px]">
                       {/* No Icon for minimal style, or simple span */}
                       <span>{stat.label}</span>
                     </div>
-                    <span className="text-[14px] text-[#121212] font-semibold">{stat.value}</span>
+                    <span className="text-[14px] text-[var(--zh-text-main)] font-semibold">{stat.value}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="bg-white shadow-sm rounded-sm text-[13px] text-[#8590A6] p-0 overflow-hidden">
-              <div className="px-5 py-4 border-b border-[#F0F2F7]">
-                <h3 className="font-semibold text-[15px] text-[#121212]">账号绑定</h3>
+            <div className="bg-white shadow-sm rounded-sm text-[13px] text-[var(--zh-text-gray)] p-0 overflow-hidden">
+              <div className="px-5 py-4 border-b border-[var(--zh-border)]">
+                <h3 className="font-semibold text-[15px] text-[var(--zh-text-main)]">账号绑定</h3>
               </div>
               {bindStatusMessage && (
-                <div className="mx-3 mt-3 rounded-[3px] bg-[#F6F8FA] px-3 py-2 text-[13px] text-[#646464]">
+                <div className="mx-3 mt-3 rounded-[3px] bg-[#F6F8FA] px-3 py-2 text-[13px] text-[var(--zh-text-secondary)]">
                   {bindStatusMessage}
                 </div>
               )}
@@ -783,17 +798,17 @@ export default function ProfilePage() {
                   const canUnbind = canUnbindProviders[provider.key];
                   const unbinding = unbindLoadingProvider === provider.key;
                   return (
-                    <div key={provider.key} className="px-3 py-2.5 flex items-center justify-between hover:bg-gray-50 transition-colors rounded-sm group">
+                    <div key={provider.key} className="px-3 py-2.5 flex items-center justify-between hover:bg-[var(--zh-bg)] transition-colors rounded-sm group">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center border border-[#EBECF0]">
+                        <div className="w-8 h-8 rounded-full bg-[var(--zh-bg)] flex items-center justify-center border border-[var(--zh-border)]">
                           {provider.icon}
                         </div>
-                        <span className="text-[#121212] font-medium text-[14px]">{provider.label}</span>
+                        <span className="text-[var(--zh-text-main)] font-medium text-[14px]">{provider.label}</span>
                       </div>
 
                       {isBound ? (
                         <div className="flex items-center gap-2">
-                          <span className="text-[12px] text-[#8590A6] flex items-center gap-1">
+                          <span className="text-[12px] text-[var(--zh-text-gray)] flex items-center gap-1">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                             已绑定
                           </span>
@@ -802,7 +817,7 @@ export default function ProfilePage() {
                             disabled={!canUnbind || unbinding}
                             onClick={() => handleUnbind(provider.key)}
                             className={`text-[12px] px-2.5 py-1 rounded border transition-colors ${canUnbind
-                              ? 'text-[#D14343] border-[#F3C7C7] hover:bg-[#FFF3F3]'
+                              ? 'text-[var(--zh-red)] border-[var(--zh-red-border)] hover:bg-[var(--zh-red-light)]'
                               : 'text-[#B0B0B0] border-[#E5E5E5] cursor-not-allowed'
                               }`}
                             title={canUnbind ? '解绑此账号' : '至少保留一个绑定方式'}
@@ -814,7 +829,7 @@ export default function ProfilePage() {
                         <button
                           type="button"
                           onClick={() => handleBind(provider.key)}
-                          className="text-[13px] px-3 py-1 rounded transition-colors flex items-center justify-center leading-none text-[#0066FF] border border-[#0066FF] hover:bg-[#0066FF]/5 font-medium"
+                          className="text-[13px] px-3 py-1 rounded transition-colors flex items-center justify-center leading-none text-[var(--zh-blue)] border border-[var(--zh-blue)] hover:bg-[var(--zh-blue)]/5 font-medium"
                         >
                           绑定
                         </button>
@@ -826,10 +841,10 @@ export default function ProfilePage() {
             </div>
 
             {/* 人格导入 */}
-            <div className="bg-white shadow-sm rounded-sm text-[13px] text-[#8590A6] p-0 overflow-hidden">
-              <div className="px-5 py-4 border-b border-[#F0F2F7]">
-                <h3 className="font-semibold text-[15px] text-[#121212]">人格导入</h3>
-                <p className="text-[12px] text-[#8590A6] mt-1">从 ChatGPT / Claude 等 AI 导入你的性格画像，让所有 AI 互动更懂你</p>
+            <div className="bg-white shadow-sm rounded-sm text-[13px] text-[var(--zh-text-gray)] p-0 overflow-hidden">
+              <div className="px-5 py-4 border-b border-[var(--zh-border)]">
+                <h3 className="font-semibold text-[15px] text-[var(--zh-text-main)]">人格导入</h3>
+                <p className="text-[12px] text-[var(--zh-text-gray)] mt-1">从 ChatGPT / Claude 等 AI 导入你的性格画像，让所有 AI 互动更懂你</p>
               </div>
               {personaData ? (
                 <div className="p-3">
@@ -837,26 +852,26 @@ export default function ProfilePage() {
                     {personaData.traits?.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {personaData.traits.map((trait) => (
-                          <span key={trait} className="px-2 py-0.5 bg-[#EBF5FF] text-[#0066FF] text-[12px] rounded-full">{trait}</span>
+                          <span key={trait} className="px-2 py-0.5 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] text-[12px] rounded-full">{trait}</span>
                         ))}
                       </div>
                     )}
                     {personaData.interests?.length > 0 && (
-                      <div className="text-[12px] text-[#646464]">
+                      <div className="text-[12px] text-[var(--zh-text-secondary)]">
                         关注：{personaData.interests.join('、')}
                       </div>
                     )}
                     {personaData.communicationStyle && (
-                      <div className="text-[12px] text-[#646464]">
+                      <div className="text-[12px] text-[var(--zh-text-secondary)]">
                         风格：{personaData.communicationStyle}
                       </div>
                     )}
                     {personaData.speakingExample && (
-                      <div className="text-[12px] text-[#646464] italic bg-[#F6F8FA] rounded-[3px] px-2 py-1.5 border-l-2 border-[#0066FF]/30">
+                      <div className="text-[12px] text-[var(--zh-text-secondary)] italic bg-[#F6F8FA] rounded-[3px] px-2 py-1.5 border-l-2 border-[var(--zh-blue)]/30">
                         &ldquo;{personaData.speakingExample}&rdquo;
                       </div>
                     )}
-                    <div className="text-[12px] text-[#8590A6]">
+                    <div className="text-[12px] text-[var(--zh-text-gray)]">
                       来源：{personaData.sourceAI || '未知'} · 导入于 {new Date(personaData.importedAt).toLocaleDateString()}
                     </div>
                   </div>
@@ -864,14 +879,14 @@ export default function ProfilePage() {
                     <button
                       type="button"
                       onClick={() => { resetPersonaModal(); setShowPersonaModal(true); }}
-                      className="text-[12px] px-3 py-1.5 rounded border border-[#0066FF] text-[#0066FF] hover:bg-[#0066FF]/5 transition-colors"
+                      className="text-[12px] px-3 py-1.5 rounded border border-[var(--zh-blue)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue)]/5 transition-colors"
                     >
                       重新导入
                     </button>
                     <button
                       type="button"
                       onClick={handlePersonaDelete}
-                      className="text-[12px] px-3 py-1.5 rounded border border-[#F3C7C7] text-[#D14343] hover:bg-[#FFF3F3] transition-colors"
+                      className="text-[12px] px-3 py-1.5 rounded border border-[var(--zh-red-border)] text-[var(--zh-red)] hover:bg-[var(--zh-red-light)] transition-colors"
                     >
                       清除
                     </button>
@@ -882,7 +897,7 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => { resetPersonaModal(); setShowPersonaModal(true); }}
-                    className="w-full py-2.5 text-[13px] text-[#0066FF] hover:bg-[#0066FF]/5 rounded-sm transition-colors font-medium border border-dashed border-[#D3E3FD]"
+                    className="w-full py-2.5 text-[13px] text-[var(--zh-blue)] hover:bg-[var(--zh-blue)]/5 rounded-sm transition-colors font-medium border border-dashed border-[var(--zh-blue)]"
                   >
                     + 导入我的 AI 画像
                   </button>
@@ -891,21 +906,21 @@ export default function ProfilePage() {
             </div>
 
             {/* OpenClaw 接入 */}
-            <div className="bg-white shadow-sm rounded-sm text-[13px] text-[#8590A6] p-0 overflow-hidden">
-              <div className="px-5 py-4 border-b border-[#F0F2F7]">
-                <h3 className="font-semibold text-[15px] text-[#121212]">OpenClaw 接入</h3>
-                <p className="text-[12px] text-[#8590A6] mt-1">生成 API Key 后配置到 <a href={openClawSkillDocUrl} target="_blank" rel="noopener noreferrer" className="text-[#0066FF] hover:underline">OpenClaw Skill</a>，Agent 即可自动浏览、提问、回答和投票</p>
+            <div className="bg-white shadow-sm rounded-sm text-[13px] text-[var(--zh-text-gray)] p-0 overflow-hidden">
+              <div className="px-5 py-4 border-b border-[var(--zh-border)]">
+                <h3 className="font-semibold text-[15px] text-[var(--zh-text-main)]">OpenClaw 接入</h3>
+                <p className="text-[12px] text-[var(--zh-text-gray)] mt-1">生成 API Key 后配置到 <a href={openClawSkillDocUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--zh-blue)] hover:underline">OpenClaw Skill</a>，Agent 即可自动浏览、提问、回答和投票</p>
               </div>
 
               {newKeyResult && (
                 <div className="mx-3 mt-3 rounded-[3px] bg-[#FFF8E1] border border-[#FFE082] px-3 py-2.5">
                   <div className="text-[12px] text-[#F57F17] font-medium mb-1">⚠️ 请立即复制，此后不再显示</div>
                   <div className="flex items-center gap-2">
-                    <code className="text-[12px] text-[#121212] bg-[#F5F5F5] px-2 py-1 rounded flex-1 break-all select-all">{newKeyResult}</code>
+                    <code className="text-[12px] text-[var(--zh-text-main)] bg-[#F5F5F5] px-2 py-1 rounded flex-1 break-all select-all">{newKeyResult}</code>
                     <button
                       type="button"
                       onClick={() => { navigator.clipboard.writeText(newKeyResult); setNewKeyResult(null); }}
-                      className="shrink-0 text-[12px] px-2.5 py-1 rounded border border-[#0066FF] text-[#0066FF] hover:bg-[#0066FF]/5 transition-colors"
+                      className="shrink-0 text-[12px] px-2.5 py-1 rounded border border-[var(--zh-blue)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue)]/5 transition-colors"
                     >
                       复制
                     </button>
@@ -915,14 +930,14 @@ export default function ProfilePage() {
 
               <div className="p-2">
                 {agentKeys.map((ak) => (
-                  <div key={ak.id} className="px-3 py-2.5 flex items-center justify-between hover:bg-gray-50 transition-colors rounded-sm group">
+                  <div key={ak.id} className="px-3 py-2.5 flex items-center justify-between hover:bg-[var(--zh-bg)] transition-colors rounded-sm group">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center border border-[#EBECF0]">
+                      <div className="w-8 h-8 rounded-full bg-[var(--zh-bg)] flex items-center justify-center border border-[var(--zh-border)]">
                         <Icons.Bot size={16} className="text-[#8B5CF6]" />
                       </div>
                       <div>
-                        <div className="text-[#121212] font-medium text-[14px]">{ak.name}</div>
-                        <div className="text-[12px] text-[#8590A6]">
+                        <div className="text-[var(--zh-text-main)] font-medium text-[14px]">{ak.name}</div>
+                        <div className="text-[12px] text-[var(--zh-text-gray)]">
                           <code>{ak.prefix}</code>
                           {ak.lastUsedAt && <span className="ml-2">· 最近使用 {new Date(ak.lastUsedAt).toLocaleDateString()}</span>}
                         </div>
@@ -931,7 +946,7 @@ export default function ProfilePage() {
                     <button
                       type="button"
                       onClick={() => deleteAgentKey(ak.id)}
-                      className="text-[12px] px-2.5 py-1 rounded border text-[#D14343] border-[#F3C7C7] hover:bg-[#FFF3F3] transition-colors opacity-0 group-hover:opacity-100"
+                      className="text-[12px] px-2.5 py-1 rounded border text-[var(--zh-red)] border-[var(--zh-red-border)] hover:bg-[var(--zh-red-light)] transition-colors opacity-0 group-hover:opacity-100"
                     >
                       删除
                     </button>
@@ -942,7 +957,7 @@ export default function ProfilePage() {
                   type="button"
                   onClick={createAgentKey}
                   disabled={agentKeyCreating}
-                  className="w-full mt-1 py-2.5 text-[13px] text-[#0066FF] hover:bg-[#0066FF]/5 rounded-sm transition-colors font-medium border border-dashed border-[#D3E3FD] disabled:opacity-50"
+                  className="w-full mt-1 py-2.5 text-[13px] text-[var(--zh-blue)] hover:bg-[var(--zh-blue)]/5 rounded-sm transition-colors font-medium border border-dashed border-[var(--zh-blue)] disabled:opacity-50"
                 >
                   {agentKeyCreating ? '生成中...' : '+ 生成新 API Key'}
                 </button>
@@ -955,35 +970,35 @@ export default function ProfilePage() {
       {isEditing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white rounded-[2px] shadow-2xl w-full max-w-[500px] overflow-hidden animate-slideInUp">
-            <div className="px-6 py-5 border-b border-[#F0F2F7] flex justify-between items-center bg-white">
-              <h3 className="font-bold text-[20px] text-[#121212]">编辑个人资料</h3>
-              <button onClick={() => setIsEditing(false)} className="text-[#8590A6] hover:text-[#121212] transition-colors">
+            <div className="px-6 py-5 border-b border-[var(--zh-border)] flex justify-between items-center bg-white">
+              <h3 className="font-bold text-[20px] text-[var(--zh-text-main)]">编辑个人资料</h3>
+              <button onClick={() => setIsEditing(false)} className="text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)] transition-colors">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M13.414 12l5.293-5.293a1 1 0 1 0-1.414-1.414L12 10.586 6.707 5.293a1 1 0 0 0-1.414 1.414L10.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L12 13.414l5.293 5.293a1 1 0 0 0 1.414-1.414L13.414 12z" /></svg>
               </button>
             </div>
             <div className="p-6 space-y-5">
               <div>
-                <label className="block text-[14px] font-semibold text-[#121212] mb-2">封面图片链接</label>
+                <label className="block text-[14px] font-semibold text-[var(--zh-text-main)] mb-2">封面图片链接</label>
                 <input
-                  className="w-full rounded-[3px] border border-[#EBECF0] px-3 h-[36px] text-sm focus:border-[#0066FF] focus:outline-none transition-colors placeholder:text-[#8590A6]"
+                  className="w-full rounded-[3px] border border-[var(--zh-border)] px-3 h-[36px] text-sm focus:border-[var(--zh-blue)] focus:outline-none transition-colors placeholder:text-[var(--zh-text-gray)]"
                   value={editableProfile.coverUrl}
                   onChange={(e) => setEditableProfile((p) => ({ ...p, coverUrl: e.target.value }))}
                   placeholder="https://..."
                 />
               </div>
               <div>
-                <label className="block text-[14px] font-semibold text-[#121212] mb-2">头像图片链接</label>
+                <label className="block text-[14px] font-semibold text-[var(--zh-text-main)] mb-2">头像图片链接</label>
                 <input
-                  className="w-full rounded-[3px] border border-[#EBECF0] px-3 h-[36px] text-sm focus:border-[#0066FF] focus:outline-none transition-colors placeholder:text-[#8590A6]"
+                  className="w-full rounded-[3px] border border-[var(--zh-border)] px-3 h-[36px] text-sm focus:border-[var(--zh-blue)] focus:outline-none transition-colors placeholder:text-[var(--zh-text-gray)]"
                   value={editableProfile.avatarUrl}
                   onChange={(e) => setEditableProfile((p) => ({ ...p, avatarUrl: e.target.value }))}
                   placeholder="https://..."
                 />
               </div>
               <div>
-                <label className="block text-[14px] font-semibold text-[#121212] mb-2">昵称</label>
+                <label className="block text-[14px] font-semibold text-[var(--zh-text-main)] mb-2">昵称</label>
                 <input
-                  className="w-full rounded-[3px] border border-[#EBECF0] px-3 h-[36px] text-sm focus:border-[#0066FF] focus:outline-none transition-colors placeholder:text-[#8590A6]"
+                  className="w-full rounded-[3px] border border-[var(--zh-border)] px-3 h-[36px] text-sm focus:border-[var(--zh-blue)] focus:outline-none transition-colors placeholder:text-[var(--zh-text-gray)]"
                   value={editableProfile.displayName}
                   onChange={(e) => setEditableProfile((p) => ({ ...p, displayName: e.target.value }))}
                   maxLength={40}
@@ -991,9 +1006,9 @@ export default function ProfilePage() {
                 />
               </div>
               <div>
-                <label className="block text-[14px] font-semibold text-[#121212] mb-2">一句话介绍</label>
+                <label className="block text-[14px] font-semibold text-[var(--zh-text-main)] mb-2">一句话介绍</label>
                 <input
-                  className="w-full rounded-[3px] border border-[#EBECF0] px-3 h-[36px] text-sm focus:border-[#0066FF] focus:outline-none transition-colors placeholder:text-[#8590A6]"
+                  className="w-full rounded-[3px] border border-[var(--zh-border)] px-3 h-[36px] text-sm focus:border-[var(--zh-blue)] focus:outline-none transition-colors placeholder:text-[var(--zh-text-gray)]"
                   value={editableProfile.bio}
                   onChange={(e) => setEditableProfile((p) => ({ ...p, bio: e.target.value }))}
                   maxLength={200}
@@ -1001,17 +1016,17 @@ export default function ProfilePage() {
                 />
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-[#F0F2F7] flex justify-end gap-3 bg-white">
+            <div className="px-6 py-4 border-t border-[var(--zh-border)] flex justify-end gap-3 bg-white">
               <button
                 onClick={() => setIsEditing(false)}
-                className="px-4 py-2 text-[#8590A6] hover:text-[#121212] text-[14px] transition-colors font-medium"
+                className="px-4 py-2 text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)] text-[14px] transition-colors font-medium"
               >
                 取消
               </button>
               <button
                 onClick={handleProfileSave}
                 disabled={profileSaving}
-                className="px-5 py-2 bg-[#0066FF] text-white rounded-[3px] text-[14px] font-semibold hover:bg-[#005ce6] disabled:opacity-50 transition-colors"
+                className="px-5 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] text-[14px] font-semibold hover:bg-[var(--zh-blue-hover)] disabled:opacity-50 transition-colors"
                 style={{ boxShadow: '0 1px 1px 0 rgba(0,0,0,0.1)' }}
               >
                 {profileSaving ? '保存中...' : '保存'}
@@ -1026,18 +1041,18 @@ export default function ProfilePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={() => { setShowPersonaModal(false); resetPersonaModal(); }}>
           <div className="bg-white rounded-[2px] shadow-2xl w-full max-w-[540px] max-h-[85vh] overflow-hidden animate-slideInUp" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="px-6 py-5 border-b border-[#F0F2F7] flex justify-between items-center bg-white">
+            <div className="px-6 py-5 border-b border-[var(--zh-border)] flex justify-between items-center bg-white">
               <div>
-                <h3 className="font-bold text-[20px] text-[#121212]">导入 AI 画像</h3>
+                <h3 className="font-bold text-[20px] text-[var(--zh-text-main)]">导入 AI 画像</h3>
                 <div className="flex items-center gap-2 mt-2">
                   {(['prompt', 'paste', 'preview'] as const).map((s, i) => (
                     <div key={s} className="flex items-center gap-1.5">
                       <div className={`w-6 h-6 rounded-full text-[12px] font-semibold flex items-center justify-center ${
-                        personaStep === s ? 'bg-[#0066FF] text-white' :
-                        (['prompt', 'paste', 'preview'].indexOf(personaStep) > i) ? 'bg-[#E8F0FE] text-[#0066FF]' :
-                        'bg-[#F0F2F7] text-[#8590A6]'
+                        personaStep === s ? 'bg-[var(--zh-blue)] text-white' :
+                        (['prompt', 'paste', 'preview'].indexOf(personaStep) > i) ? 'bg-[#E8F0FE] text-[var(--zh-blue)]' :
+                        'bg-[#F0F2F7] text-[var(--zh-text-gray)]'
                       }`}>{i + 1}</div>
-                      <span className={`text-[12px] ${personaStep === s ? 'text-[#0066FF] font-medium' : 'text-[#8590A6]'}`}>
+                      <span className={`text-[12px] ${personaStep === s ? 'text-[var(--zh-blue)] font-medium' : 'text-[var(--zh-text-gray)]'}`}>
                         {s === 'prompt' ? '复制提示词' : s === 'paste' ? '粘贴结果' : '确认保存'}
                       </span>
                       {i < 2 && <span className="text-[#D0D5DD] mx-1">&gt;</span>}
@@ -1045,7 +1060,7 @@ export default function ProfilePage() {
                   ))}
                 </div>
               </div>
-              <button onClick={() => { setShowPersonaModal(false); resetPersonaModal(); }} className="text-[#8590A6] hover:text-[#121212] transition-colors">
+              <button onClick={() => { setShowPersonaModal(false); resetPersonaModal(); }} className="text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)] transition-colors">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M13.414 12l5.293-5.293a1 1 0 1 0-1.414-1.414L12 10.586 6.707 5.293a1 1 0 0 0-1.414 1.414L10.586 12l-5.293 5.293a1 1 0 1 0 1.414 1.414L12 13.414l5.293 5.293a1 1 0 0 0 1.414-1.414L13.414 12z" /></svg>
               </button>
             </div>
@@ -1054,15 +1069,15 @@ export default function ProfilePage() {
             <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 160px)' }}>
               {personaStep === 'prompt' && (
                 <div className="space-y-4">
-                  <p className="text-[14px] text-[#646464]">将下面的提示词复制到你常用的 AI（ChatGPT、Claude、Gemini 等）中，让它分析你的偏好和性格。</p>
+                  <p className="text-[14px] text-[var(--zh-text-secondary)]">将下面的提示词复制到你常用的 AI（ChatGPT、Claude、Gemini 等）中，让它分析你的偏好和性格。</p>
                   <div className="relative">
-                    <pre className="bg-[#F6F8FA] border border-[#EBECF0] rounded-[3px] p-4 text-[13px] text-[#121212] whitespace-pre-wrap leading-relaxed max-h-[280px] overflow-y-auto">
+                    <pre className="bg-[#F6F8FA] border border-[var(--zh-border)] rounded-[3px] p-4 text-[13px] text-[var(--zh-text-main)] whitespace-pre-wrap leading-relaxed max-h-[280px] overflow-y-auto">
                       {PERSONA_EXTRACTION_PROMPT}
                     </pre>
                     <button
                       type="button"
                       onClick={handlePersonaCopy}
-                      className="absolute top-2 right-2 px-3 py-1.5 text-[12px] rounded border border-[#0066FF] text-[#0066FF] hover:bg-[#0066FF]/5 bg-white transition-colors"
+                      className="absolute top-2 right-2 px-3 py-1.5 text-[12px] rounded border border-[var(--zh-blue)] text-[var(--zh-blue)] hover:bg-[var(--zh-blue)]/5 bg-white transition-colors"
                     >
                       {personaCopied ? '已复制' : '复制'}
                     </button>
@@ -1072,13 +1087,13 @@ export default function ProfilePage() {
 
               {personaStep === 'paste' && (
                 <div className="space-y-4">
-                  <p className="text-[14px] text-[#646464]">将 AI 输出的结果粘贴到下方，我们会自动解析你的性格画像。</p>
+                  <p className="text-[14px] text-[var(--zh-text-secondary)]">将 AI 输出的结果粘贴到下方，我们会自动解析你的性格画像。</p>
                   <div>
-                    <label className="block text-[14px] font-semibold text-[#121212] mb-2">来源 AI</label>
+                    <label className="block text-[14px] font-semibold text-[var(--zh-text-main)] mb-2">来源 AI</label>
                     <select
                       value={personaSourceAI}
                       onChange={(e) => setPersonaSourceAI(e.target.value)}
-                      className="w-full rounded-[3px] border border-[#EBECF0] px-3 h-[36px] text-sm focus:border-[#0066FF] focus:outline-none transition-colors bg-white"
+                      className="w-full rounded-[3px] border border-[var(--zh-border)] px-3 h-[36px] text-sm focus:border-[var(--zh-blue)] focus:outline-none transition-colors bg-white"
                     >
                       <option value="ChatGPT">ChatGPT</option>
                       <option value="Claude">Claude</option>
@@ -1088,17 +1103,17 @@ export default function ProfilePage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[14px] font-semibold text-[#121212] mb-2">AI 输出内容</label>
+                    <label className="block text-[14px] font-semibold text-[var(--zh-text-main)] mb-2">AI 输出内容</label>
                     <textarea
                       value={personaRawText}
                       onChange={(e) => setPersonaRawText(e.target.value)}
                       placeholder='将 AI 的回复粘贴到这里...'
-                      className="w-full rounded-[3px] border border-[#EBECF0] px-3 py-2.5 text-sm focus:border-[#0066FF] focus:outline-none transition-colors placeholder:text-[#8590A6] resize-none"
+                      className="w-full rounded-[3px] border border-[var(--zh-border)] px-3 py-2.5 text-sm focus:border-[var(--zh-blue)] focus:outline-none transition-colors placeholder:text-[var(--zh-text-gray)] resize-none"
                       rows={10}
                     />
                   </div>
                   {personaError && (
-                    <div className="text-[13px] text-[#D14343] bg-[#FFF3F3] border border-[#F3C7C7] rounded-[3px] px-3 py-2">
+                    <div className="text-[13px] text-[var(--zh-red)] bg-[#FFF3F3] border border-[var(--zh-red-border)] rounded-[3px] px-3 py-2">
                       {personaError}
                     </div>
                   )}
@@ -1107,17 +1122,17 @@ export default function ProfilePage() {
 
               {personaStep === 'preview' && personaPreview && (
                 <div className="space-y-4">
-                  <p className="text-[14px] text-[#646464]">解析完成！检查以下画像是否准确，点击标签上的 x 可删除不准确的项。</p>
+                  <p className="text-[14px] text-[var(--zh-text-secondary)]">解析完成！检查以下画像是否准确，点击标签上的 x 可删除不准确的项。</p>
 
                   {/* Traits */}
                   {(personaPreview.traits as string[] | undefined)?.length ? (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">性格特点</label>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">性格特点</label>
                       <div className="flex flex-wrap gap-1.5">
                         {(personaPreview.traits as string[]).map((t, i) => (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#EBF5FF] text-[#0066FF] text-[12px] rounded-full">
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] text-[12px] rounded-full">
                             {t}
-                            <button type="button" onClick={() => removePersonaTag('traits', i)} className="hover:text-[#D14343]">&times;</button>
+                            <button type="button" onClick={() => removePersonaTag('traits', i)} className="hover:text-[var(--zh-red)]">&times;</button>
                           </span>
                         ))}
                       </div>
@@ -1127,12 +1142,12 @@ export default function ProfilePage() {
                   {/* Interests */}
                   {(personaPreview.interests as string[] | undefined)?.length ? (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">兴趣领域</label>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">兴趣领域</label>
                       <div className="flex flex-wrap gap-1.5">
                         {(personaPreview.interests as string[]).map((t, i) => (
                           <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#F0FDF4] text-[#16A34A] text-[12px] rounded-full">
                             {t}
-                            <button type="button" onClick={() => removePersonaTag('interests', i)} className="hover:text-[#D14343]">&times;</button>
+                            <button type="button" onClick={() => removePersonaTag('interests', i)} className="hover:text-[var(--zh-red)]">&times;</button>
                           </span>
                         ))}
                       </div>
@@ -1142,12 +1157,12 @@ export default function ProfilePage() {
                   {/* Expertise Areas */}
                   {(personaPreview.expertiseAreas as string[] | undefined)?.length ? (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">擅长领域</label>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">擅长领域</label>
                       <div className="flex flex-wrap gap-1.5">
                         {(personaPreview.expertiseAreas as string[]).map((t, i) => (
                           <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FFF7ED] text-[#EA580C] text-[12px] rounded-full">
                             {t}
-                            <button type="button" onClick={() => removePersonaTag('expertiseAreas', i)} className="hover:text-[#D14343]">&times;</button>
+                            <button type="button" onClick={() => removePersonaTag('expertiseAreas', i)} className="hover:text-[var(--zh-red)]">&times;</button>
                           </span>
                         ))}
                       </div>
@@ -1157,32 +1172,32 @@ export default function ProfilePage() {
                   {/* Text fields */}
                   {personaPreview.communicationStyle && (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">沟通风格</label>
-                      <div className="text-[13px] text-[#646464] bg-[#F6F8FA] rounded-[3px] px-3 py-2">{personaPreview.communicationStyle}</div>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">沟通风格</label>
+                      <div className="text-[13px] text-[var(--zh-text-secondary)] bg-[#F6F8FA] rounded-[3px] px-3 py-2">{personaPreview.communicationStyle}</div>
                     </div>
                   )}
                   {personaPreview.tonePreference && (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">语气偏好</label>
-                      <div className="text-[13px] text-[#646464] bg-[#F6F8FA] rounded-[3px] px-3 py-2">{personaPreview.tonePreference}</div>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">语气偏好</label>
+                      <div className="text-[13px] text-[var(--zh-text-secondary)] bg-[#F6F8FA] rounded-[3px] px-3 py-2">{personaPreview.tonePreference}</div>
                     </div>
                   )}
                   {personaPreview.argumentStyle && (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">论证方式</label>
-                      <div className="text-[13px] text-[#646464] bg-[#F6F8FA] rounded-[3px] px-3 py-2">{personaPreview.argumentStyle}</div>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">论证方式</label>
+                      <div className="text-[13px] text-[var(--zh-text-secondary)] bg-[#F6F8FA] rounded-[3px] px-3 py-2">{personaPreview.argumentStyle}</div>
                     </div>
                   )}
 
                   {/* Values */}
                   {(personaPreview.values as string[] | undefined)?.length ? (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">价值观</label>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">价值观</label>
                       <div className="flex flex-wrap gap-1.5">
                         {(personaPreview.values as string[]).map((t, i) => (
                           <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#F5F3FF] text-[#7C3AED] text-[12px] rounded-full">
                             {t}
-                            <button type="button" onClick={() => removePersonaTag('values', i)} className="hover:text-[#D14343]">&times;</button>
+                            <button type="button" onClick={() => removePersonaTag('values', i)} className="hover:text-[var(--zh-red)]">&times;</button>
                           </span>
                         ))}
                       </div>
@@ -1191,15 +1206,15 @@ export default function ProfilePage() {
 
                   {personaPreview.speakingExample && (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">说话示例</label>
-                      <div className="text-[13px] text-[#646464] bg-[#F6F8FA] rounded-[3px] px-3 py-2 italic border-l-2 border-[#0066FF]/30">&ldquo;{personaPreview.speakingExample}&rdquo;</div>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">说话示例</label>
+                      <div className="text-[13px] text-[var(--zh-text-secondary)] bg-[#F6F8FA] rounded-[3px] px-3 py-2 italic border-l-2 border-[var(--zh-blue)]/30">&ldquo;{personaPreview.speakingExample}&rdquo;</div>
                     </div>
                   )}
 
                   {personaPreview.controversialStances && (
                     <div>
-                      <label className="block text-[13px] font-semibold text-[#121212] mb-1.5">争议话题态度</label>
-                      <div className="text-[13px] text-[#646464] bg-[#F6F8FA] rounded-[3px] px-3 py-2">{personaPreview.controversialStances}</div>
+                      <label className="block text-[13px] font-semibold text-[var(--zh-text-main)] mb-1.5">争议话题态度</label>
+                      <div className="text-[13px] text-[var(--zh-text-secondary)] bg-[#F6F8FA] rounded-[3px] px-3 py-2">{personaPreview.controversialStances}</div>
                     </div>
                   )}
                 </div>
@@ -1207,7 +1222,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-[#F0F2F7] flex justify-between items-center bg-white">
+            <div className="px-6 py-4 border-t border-[var(--zh-border)] flex justify-between items-center bg-white">
               <button
                 type="button"
                 onClick={() => {
@@ -1215,7 +1230,7 @@ export default function ProfilePage() {
                   else if (personaStep === 'preview') { setPersonaStep('paste'); setPersonaError(''); }
                   else { setShowPersonaModal(false); resetPersonaModal(); }
                 }}
-                className="px-4 py-2 text-[#8590A6] hover:text-[#121212] text-[14px] transition-colors font-medium"
+                className="px-4 py-2 text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)] text-[14px] transition-colors font-medium"
               >
                 {personaStep === 'prompt' ? '取消' : '上一步'}
               </button>
@@ -1224,7 +1239,7 @@ export default function ProfilePage() {
                   <button
                     type="button"
                     onClick={() => setPersonaStep('paste')}
-                    className="px-5 py-2 bg-[#0066FF] text-white rounded-[3px] text-[14px] font-semibold hover:bg-[#005ce6] transition-colors"
+                    className="px-5 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] text-[14px] font-semibold hover:bg-[var(--zh-blue-hover)] transition-colors"
                   >
                     下一步
                   </button>
@@ -1234,7 +1249,7 @@ export default function ProfilePage() {
                     type="button"
                     onClick={handlePersonaParse}
                     disabled={personaParsing || !personaRawText.trim()}
-                    className="px-5 py-2 bg-[#0066FF] text-white rounded-[3px] text-[14px] font-semibold hover:bg-[#005ce6] disabled:opacity-50 transition-colors"
+                    className="px-5 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] text-[14px] font-semibold hover:bg-[var(--zh-blue-hover)] disabled:opacity-50 transition-colors"
                   >
                     {personaParsing ? '解析中...' : '解析并预览'}
                   </button>
@@ -1244,7 +1259,7 @@ export default function ProfilePage() {
                     type="button"
                     onClick={handlePersonaSave}
                     disabled={personaSaving}
-                    className="px-5 py-2 bg-[#0066FF] text-white rounded-[3px] text-[14px] font-semibold hover:bg-[#005ce6] disabled:opacity-50 transition-colors"
+                    className="px-5 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] text-[14px] font-semibold hover:bg-[var(--zh-blue-hover)] disabled:opacity-50 transition-colors"
                   >
                     {personaSaving ? '保存中...' : '确认保存'}
                   </button>

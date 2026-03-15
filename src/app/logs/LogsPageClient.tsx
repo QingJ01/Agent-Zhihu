@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { AppHeader } from '@/components/AppHeader';
+import { openLoginModal } from '@/lib/loginModal';
 
 type LogActionType = 'human_question' | 'agent_question' | 'human_reply' | 'agent_reply';
 
@@ -43,6 +44,8 @@ export default function LogsPage() {
   });
 
   useEffect(() => {
+    if (!session?.user) return;
+
     const sync = async () => {
       try {
         const response = await fetch('/api/logs?limit=200');
@@ -62,7 +65,7 @@ export default function LogsPage() {
     return () => {
       window.removeEventListener('agent-zhihu-store-updated', sync);
     };
-  }, []);
+  }, [session]);
 
   const typeLabel: Record<LogActionType, string> = {
     human_question: '真人提问',
@@ -72,77 +75,82 @@ export default function LogsPage() {
   };
 
   const typeColor: Record<LogActionType, string> = {
-    human_question: 'bg-blue-100 text-blue-700',
-    agent_question: 'bg-purple-100 text-purple-700',
-    human_reply: 'bg-teal-100 text-teal-700',
-    agent_reply: 'bg-amber-100 text-amber-700',
+    human_question: 'bg-[var(--zh-blue-light)] text-[var(--zh-blue)]',
+    agent_question: 'bg-purple-50 text-purple-700',
+    human_reply: 'bg-[var(--zh-green-light)] text-[var(--zh-green)]',
+    agent_reply: 'bg-[var(--zh-orange-light)] text-[var(--zh-orange)]',
+  };
+
+  const statColor: Record<string, string> = {
+    humanQuestions: 'text-[var(--zh-blue)]',
+    agentQuestions: 'text-purple-600',
+    humanReplies: 'text-[var(--zh-green)]',
+    agentReplies: 'text-[var(--zh-orange)]',
   };
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent" />
+      <div className="min-h-screen bg-[var(--zh-bg)] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-[var(--zh-blue)] border-t-transparent" />
       </div>
     );
   }
 
-  if (!session?.user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
-        <p className="text-gray-600">请先登录后查看日志</p>
-        <Link href="/" className="text-blue-600 hover:underline">返回首页</Link>
-      </div>
-    );
-  }
+  const isLoggedIn = !!session?.user;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--zh-bg)]">
       <AppHeader />
 
       <main className="max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-6 mt-[104px] md:mt-[52px] space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
-            <p className="text-xs text-gray-500">真人提问</p>
-            <p className="mt-1 text-2xl font-bold text-blue-600">{stats.humanQuestions}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
-            <p className="text-xs text-gray-500">分身提问</p>
-            <p className="mt-1 text-2xl font-bold text-purple-600">{stats.agentQuestions}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
-            <p className="text-xs text-gray-500">真人参与讨论</p>
-            <p className="mt-1 text-2xl font-bold text-teal-600">{stats.humanReplies}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-3 md:p-4">
-            <p className="text-xs text-gray-500">分身参与讨论</p>
-            <p className="mt-1 text-2xl font-bold text-amber-600">{stats.agentReplies}</p>
-          </div>
+          {[
+            { label: '真人提问', value: stats.humanQuestions, colorKey: 'humanQuestions' },
+            { label: '分身提问', value: stats.agentQuestions, colorKey: 'agentQuestions' },
+            { label: '真人参与讨论', value: stats.humanReplies, colorKey: 'humanReplies' },
+            { label: '分身参与讨论', value: stats.agentReplies, colorKey: 'agentReplies' },
+          ].map((item) => (
+            <div key={item.label} className="bg-[var(--zh-card-bg)] rounded-[2px] border border-[var(--zh-border)] p-3 md:p-4">
+              <p className="text-xs text-[var(--zh-text-gray)]">{item.label}</p>
+              <p className={`mt-1 text-2xl font-bold ${statColor[item.colorKey]}`}>{item.value}</p>
+            </div>
+          ))}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-sm font-medium text-gray-800">时间线</p>
+        <div className="bg-[var(--zh-card-bg)] rounded-[2px] border border-[var(--zh-border)]">
+          <div className="px-4 py-3 border-b border-[var(--zh-border)]">
+            <p className="text-sm font-semibold text-[var(--zh-text-main)]">时间线</p>
           </div>
 
-          {logs.length === 0 ? (
-            <div className="px-4 py-10 text-center text-gray-500 text-sm">暂无日志，先去提问或参与讨论吧</div>
+          {!isLoggedIn ? (
+            <div className="px-4 py-16 text-center">
+              <p className="text-[var(--zh-text-gray)] text-sm mb-3">登录后查看你的活动日志</p>
+              <button
+                onClick={openLoginModal}
+                className="px-5 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] text-sm font-medium hover:bg-[var(--zh-blue-hover)] transition-colors"
+              >
+                立即登录
+              </button>
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="px-4 py-10 text-center text-[var(--zh-text-gray)] text-sm">暂无日志，先去提问或参与讨论吧</div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-[var(--zh-border)]">
               {logs.map((item) => (
-                <div key={item.id} className="px-3 md:px-4 py-3">
+                <div key={item.id} className="px-3 md:px-4 py-3 hover:bg-[var(--zh-bg)] transition-colors">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className={`px-2 py-0.5 text-xs rounded-full ${typeColor[item.type]}`}>
+                      <span className={`px-2 py-0.5 text-[11px] font-medium rounded-[2px] ${typeColor[item.type]}`}>
                         {typeLabel[item.type]}
                       </span>
-                      <Link href={`/question/${item.questionId}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 truncate">
+                      <Link href={`/question/${item.questionId}`} className="text-sm font-medium text-[var(--zh-text-main)] hover:text-[var(--zh-blue)] truncate">
                         {item.questionTitle}
                       </Link>
                     </div>
-                    <span className="text-xs text-gray-400 flex-shrink-0 self-end sm:self-auto">{formatTime(item.timestamp)}</span>
+                    <span className="text-xs text-[var(--zh-text-gray)] flex-shrink-0 self-end sm:self-auto">{formatTime(item.timestamp)}</span>
                   </div>
                   {item.contentPreview && (
-                    <p className="mt-1 text-sm text-gray-600 line-clamp-2">{item.contentPreview}</p>
+                    <p className="mt-1 text-sm text-[var(--zh-text-secondary)] line-clamp-2">{item.contentPreview}</p>
                   )}
                 </div>
               ))}

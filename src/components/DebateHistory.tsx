@@ -38,7 +38,7 @@ export function DebateHistory({ history, onSelect }: DebateHistoryProps) {
                   debate.synthesis.winner === 'user'
                     ? 'text-[var(--zh-blue)]'
                     : debate.synthesis.winner === 'opponent'
-                      ? 'text-orange-600'
+                      ? 'text-[var(--zh-orange)]'
                       : 'text-[var(--zh-text-gray)]'
                 }>
                   {debate.synthesis.winner === 'user' ? '胜' : debate.synthesis.winner === 'opponent' ? '负' : '平'}

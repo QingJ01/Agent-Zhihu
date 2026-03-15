@@ -12,6 +12,7 @@ import { HotList } from '@/components/HotList';
 import { AppHeader } from '@/components/AppHeader';
 import { AI_EXPERTS } from '@/lib/experts';
 import { HashtagText } from '@/components/HashtagText';
+import { openLoginModal } from '@/lib/loginModal';
 
 type QuestionWithMeta = Question & { isFavorited?: boolean; messageCount?: number };
 type MessageWithMeta = DiscussionMessage & { isFavorited?: boolean };
@@ -209,7 +210,7 @@ export default function QuestionPage({ params }: PageProps) {
     const handleQuestionVote = useCallback(async (voteType: 'up' | 'down') => {
         if (!question) return;
         if (!session?.user?.id) {
-            window.alert(voteType === 'up' ? '请先登录后再点赞' : '请先登录后再反对');
+            openLoginModal();
             return;
         }
 
@@ -251,7 +252,7 @@ export default function QuestionPage({ params }: PageProps) {
     const handleQuestionFavorite = useCallback(async () => {
         if (!question) return;
         if (!session?.user?.id) {
-            window.alert('请先登录后再收藏');
+            openLoginModal();
             return;
         }
 
@@ -392,7 +393,7 @@ export default function QuestionPage({ params }: PageProps) {
     if (isLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-[var(--zh-bg)]">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
+                <div className="animate-spin rounded-[3px] h-8 w-8 border-2 border-[var(--zh-blue)] border-t-transparent" />
             </div>
         );
     }
@@ -411,23 +412,23 @@ export default function QuestionPage({ params }: PageProps) {
                         <div className="bg-white p-4 md:p-6 shadow-sm rounded-[2px] mb-[10px] border border-[var(--zh-border)]">
                             <div className="flex flex-wrap gap-2 mb-4">
                                 {question.tags?.map(tag => (
-                                    <span key={tag} className="px-3 py-1 bg-[#EBF5FF] text-[var(--zh-blue)] text-sm rounded-full font-medium">{tag}</span>
+                                    <span key={tag} className="px-3 py-1 bg-[var(--zh-blue-light)] text-[var(--zh-blue)] text-sm rounded-[3px] font-medium">{tag}</span>
                                 ))}
                             </div>
-                            <h1 className="text-[20px] md:text-[22px] font-bold text-[#121212] leading-normal mb-4">{question.title}</h1>
+                            <h1 className="text-[20px] md:text-[22px] font-bold text-[var(--zh-text-main)] leading-normal mb-4">{question.title}</h1>
                             {question.description && (
-                                <div className="text-[15px] text-[#121212] leading-7 mb-4">
+                                <div className="text-[15px] text-[var(--zh-text-main)] leading-7 mb-4">
                                     <HashtagText text={question.description} onTagClick={(tag) => router.push(`/?tag=${encodeURIComponent(tag)}`)} />
                                 </div>
                             )}
 
                             <div className="flex flex-col items-start gap-3">
                                 <div className="flex flex-wrap items-center gap-2 w-full">
-                                    <button onClick={scrollToComment} className="px-4 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] font-semibold text-[14px] hover:bg-blue-600 transition-colors">写回答</button>
+                                    <button onClick={scrollToComment} className="px-4 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] font-semibold text-[14px] hover:bg-[var(--zh-blue-hover)] transition-colors">写回答</button>
                                     <button
                                         onClick={() => setShowInviteSelector(true)}
                                         disabled={isTyping}
-                                        className="px-4 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] rounded-[3px] font-semibold text-[14px] hover:bg-[#EBF5FF] transition-colors disabled:opacity-50"
+                                        className="px-4 py-2 border border-[var(--zh-blue)] text-[var(--zh-blue)] rounded-[3px] font-semibold text-[14px] hover:bg-[var(--zh-blue-light)] transition-colors disabled:opacity-50"
                                     >
                                         邀请回答
                                     </button>
@@ -480,7 +481,7 @@ export default function QuestionPage({ params }: PageProps) {
                             )}
 
                             {/* Comment Input Area */}
-                            <div ref={commentSectionRef} className="p-3 md:p-5 bg-gray-50 border-t border-[var(--zh-border)]">
+                            <div ref={commentSectionRef} className="p-3 md:p-5 bg-[var(--zh-bg)] border-t border-[var(--zh-border)]">
                                 <div className="flex items-start gap-3">
                                     <div className="flex-1">
                                         <CommentInput
@@ -519,9 +520,9 @@ export default function QuestionPage({ params }: PageProps) {
 
                 {showInviteSelector && (
                     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40 px-0 md:px-4" onClick={() => setShowInviteSelector(false)}>
-                        <div className="w-full max-w-[560px] rounded-t-xl md:rounded-lg bg-white p-4 md:p-5 shadow-xl max-h-[80vh] md:max-h-none overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <div className="w-full max-w-[560px] rounded-t-[2px] md:rounded-[2px] bg-white p-4 md:p-5 shadow-xl max-h-[80vh] md:max-h-none overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                             <div className="mb-4 flex items-center justify-between">
-                                <h3 className="text-[18px] font-semibold text-[#121212]">选择邀请回答的专家</h3>
+                                <h3 className="text-[18px] font-semibold text-[var(--zh-text-main)]">选择邀请回答的专家</h3>
                                 <button
                                     onClick={() => setShowInviteSelector(false)}
                                     className="text-sm text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)]"
@@ -537,14 +538,14 @@ export default function QuestionPage({ params }: PageProps) {
                                         <button
                                             key={agent.id}
                                             onClick={() => setInviteAgentId(agent.id)}
-                                            className={`w-full rounded-md border p-3 text-left transition-colors ${
-                                                active ? 'border-[var(--zh-blue)] bg-[#EBF5FF]' : 'border-[var(--zh-border)] hover:bg-gray-50'
+                                            className={`w-full rounded-[2px] border p-3 text-left transition-colors ${
+                                                active ? 'border-[var(--zh-blue)] bg-[var(--zh-blue-light)]' : 'border-[var(--zh-border)] hover:bg-[var(--zh-bg)]'
                                             }`}
                                         >
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <div className="text-[15px] font-semibold text-[#121212]">{agent.name}</div>
-                                                    <div className="mt-0.5 text-[13px] text-[#646464]">{agent.title}</div>
+                                                    <div className="text-[15px] font-semibold text-[var(--zh-text-main)]">{agent.name}</div>
+                                                    <div className="mt-0.5 text-[13px] text-[var(--zh-text-secondary)]">{agent.title}</div>
                                                 </div>
                                                 {active && <span className="text-xs font-semibold text-[var(--zh-blue)]">已选择</span>}
                                             </div>
@@ -556,7 +557,7 @@ export default function QuestionPage({ params }: PageProps) {
                             <div className="mt-5 flex flex-col-reverse sm:flex-row justify-end gap-2">
                                 <button
                                     onClick={() => setShowInviteSelector(false)}
-                                    className="rounded-[3px] border border-[var(--zh-border)] px-4 py-2 text-sm text-[var(--zh-text-main)] hover:bg-gray-50 w-full sm:w-auto"
+                                    className="rounded-[3px] border border-[var(--zh-border)] px-4 py-2 text-sm text-[var(--zh-text-main)] hover:bg-[var(--zh-bg)] w-full sm:w-auto"
                                 >
                                     取消
                                 </button>
@@ -566,7 +567,7 @@ export default function QuestionPage({ params }: PageProps) {
                                         void handleInviteAgent();
                                     }}
                                     disabled={isTyping}
-                                    className="rounded-[3px] bg-[var(--zh-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50 w-full sm:w-auto"
+                                    className="rounded-[3px] bg-[var(--zh-blue)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--zh-blue-hover)] disabled:opacity-50 w-full sm:w-auto"
                                 >
                                     邀请 TA 回答
                                 </button>

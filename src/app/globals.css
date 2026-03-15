@@ -5,13 +5,24 @@
 :root {
   --zh-blue: #056DE8;
   --zh-blue-hover: #005BD4;
+  --zh-blue-light: #EBF5FF;
+  --zh-blue-tint: rgba(5, 109, 232, 0.1);
   --zh-bg: #F6F6F6;
   --zh-card-bg: #FFFFFF;
   --zh-text-main: #121212;
   --zh-text-gray: #8590A6;
   --zh-text-secondary: #444444;
+  --zh-text-link-hover: #175199;
   --zh-border: #F0F2F7;
   --zh-shadow: 0 1px 3px rgba(18, 18, 18, 0.1);
+  --zh-red: #D14343;
+  --zh-red-light: #FFF3F3;
+  --zh-red-border: #F3C7C7;
+  --zh-orange: #E8590C;
+  --zh-orange-light: #FFF4E6;
+  --zh-orange-border: #FFE0B2;
+  --zh-green: #0FB36C;
+  --zh-green-light: #E6F9F0;
 }
 
 body {

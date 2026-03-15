@@ -402,7 +402,7 @@ export default function Home() {
                           aria-label="问题标题"
                           className="w-full h-[38px] px-3 bg-transparent font-bold text-[18px] placeholder-gray-400 outline-none border-b border-transparent focus:border-[var(--zh-blue)] transition-colors"
                         />
-                        <span className="absolute right-0 top-1/2 -translate-y-1/2 text-xs text-gray-300">
+                        <span className="absolute right-0 top-1/2 -translate-y-1/2 text-xs text-[var(--zh-text-gray)]">
                           {userQuestionTitle.length}/50
                         </span>
                       </div>
@@ -417,9 +417,9 @@ export default function Home() {
                     {isGenerating && (
                       <div className="pl-0 md:pl-[50px] mb-3 space-y-2">
                         {[0, 1, 2].map((i) => (
-                          <div key={i} className="p-3 rounded-lg border border-gray-100 animate-pulse">
-                            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
-                            <div className="h-3 bg-gray-100 rounded w-full" />
+                          <div key={i} className="p-3 rounded-[2px] border border-[var(--zh-border)] animate-pulse">
+                            <div className="h-4 bg-[var(--zh-border)] rounded w-3/4 mb-2" />
+                            <div className="h-3 bg-[var(--zh-bg)] rounded w-full" />
                           </div>
                         ))}
                       </div>
@@ -432,10 +432,10 @@ export default function Home() {
                               key={idx}
                               type="button"
                               onClick={() => handleSelectGenQuestion(idx)}
-                              className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                              className={`w-full text-left p-3 rounded-[2px] border transition-colors ${
                                 selectedGenIndex === idx
                                   ? 'border-[var(--zh-blue)] bg-blue-50/50'
-                                  : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50/50'
+                                  : 'border-[var(--zh-border)] hover:border-[var(--zh-text-gray)] hover:bg-[var(--zh-bg)]/50'
                               }`}
                             >
                               <p className={`text-sm font-medium ${selectedGenIndex === idx ? 'text-[var(--zh-blue)]' : 'text-[var(--zh-text-main)]'}`}>
@@ -445,7 +445,7 @@ export default function Home() {
                               {gq.tags?.length > 0 && (
                                 <div className="flex gap-1 mt-1.5">
                                   {gq.tags.map((tag) => (
-                                    <span key={tag} className="px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-[var(--zh-text-gray)]">#{tag}</span>
+                                    <span key={tag} className="px-1.5 py-0.5 text-[10px] rounded bg-[var(--zh-bg)] text-[var(--zh-text-gray)]">#{tag}</span>
                                   ))}
                                 </div>
                               )}
@@ -510,7 +510,7 @@ export default function Home() {
                           <button
                             onClick={submitUserQuestion}
                             disabled={!userQuestionInput.trim() || isSubmittingUserQuestion}
-                            className="px-5 py-1.5 bg-[#056DE8] text-white rounded-[3px] text-sm font-medium hover:bg-[#0461CF] disabled:opacity-50 transition-colors"
+                            className="px-5 py-1.5 bg-[var(--zh-blue)] text-white rounded-[3px] text-sm font-medium hover:bg-[var(--zh-blue-hover)] disabled:opacity-50 transition-colors"
                           >
                             {isSubmittingUserQuestion ? '发布中...' : '发布'}
                           </button>
@@ -541,11 +541,11 @@ export default function Home() {
                   </div>
 
                   {/* Bottom Tabs */}
-                  <div className="flex border-t border-[var(--zh-border)] bg-[#FAFBFC] overflow-x-auto">
+                  <div className="flex border-t border-[var(--zh-border)] bg-[var(--zh-bg)] overflow-x-auto">
                     <button
                       type="button"
                       onClick={handleGenerateQuestions}
-                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-[var(--zh-bg)] transition-colors group"
                     >
                       <Icons.Bot className="w-5 h-5" color="#8B5CF6" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">生成问题</span>
@@ -553,7 +553,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => titleInputRef.current?.focus()}
-                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-[var(--zh-bg)] transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.Question className="w-5 h-5" color="#0FB36C" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">提问题</span>
@@ -561,15 +561,15 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => contentInputRef.current?.focus()}
-                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-[var(--zh-bg)] transition-colors group border-l border-[var(--zh-border)]"
                     >
-                      <Icons.Answer className="w-5 h-5" color="#056DE8" />
+                      <Icons.Answer className="w-5 h-5" color="var(--zh-blue)" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写回答</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => window.alert('写文章功能正在开发中')}
-                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-[var(--zh-bg)] transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.Article className="w-5 h-5 text-[#FCC900]" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">写文章</span>
@@ -577,7 +577,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => window.alert('发视频功能正在开发中')}
-                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-gray-50 transition-colors group border-l border-[var(--zh-border)]"
+                      className="min-w-[20%] flex-1 flex items-center justify-center gap-1 md:gap-2 py-3 md:py-4 hover:bg-[var(--zh-bg)] transition-colors group border-l border-[var(--zh-border)]"
                     >
                       <Icons.VideoPlay className="w-5 h-5 text-[#F96382]" />
                       <span className="text-[12px] md:text-[14px] text-[var(--zh-text-gray)] group-hover:text-[var(--zh-text-main)] font-medium">发视频</span>
@@ -587,7 +587,7 @@ export default function Home() {
               ) : (
                 <div className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-[38px] h-[38px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-gray-400">
+                    <div className="w-[38px] h-[38px] bg-[var(--zh-bg)] rounded-[2px] flex items-center justify-center text-[var(--zh-text-gray)]">
                       <Icons.User size={24} />
                     </div>
                     <span className="text-[var(--zh-text-gray)] text-[15px]">分享你此刻的想法...</span>
