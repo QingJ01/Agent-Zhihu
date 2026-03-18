@@ -1,17 +1,13 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { DebateSession, DebateMessage, DebateSynthesis, OpponentProfile } from '@/types/secondme';
+import { ChatList } from './ChatBubble';
 import { SynthesisReport } from './SynthesisReport';
 import { DebateHistory } from './DebateHistory';
 import { useDebateHistory } from '@/lib/useDebateHistory';
-import { OPPONENT_PROFILES } from '@/lib/opponents';
 import { openLoginModal } from '@/lib/loginModal';
-import { consumeSSEStream } from '@/lib/useSSEStream';
-import Image from 'next/image';
-
-export type DebateMode = 'agent-vs-agent' | 'agent-vs-user-agent' | 'agent-vs-user';
 
 interface StreamState {
   isStreaming: boolean;
@@ -19,20 +15,12 @@ interface StreamState {
   currentContent: string;
 }
 
-const MODE_OPTIONS: { key: DebateMode; label: string; desc: string; disabled?: boolean }[] = [
-  { key: 'agent-vs-agent', label: 'Agent vs Agent', desc: '两个 AI 专家互相辩论' },
-  { key: 'agent-vs-user-agent', label: 'Agent vs 你的 Agent', desc: '你的 AI 分身代你出战' },
-  { key: 'agent-vs-user', label: 'Agent vs 你', desc: '你亲自下场和 AI 辩论' },
-];
-
 export function DebateArena() {
   const { data: session } = useSession();
-  const [mode, setMode] = useState<DebateMode>('agent-vs-user-agent');
   const [topic, setTopic] = useState('');
   const [messages, setMessages] = useState<DebateMessage[]>([]);
   const [synthesis, setSynthesis] = useState<DebateSynthesis | null>(null);
   const [opponent, setOpponent] = useState<OpponentProfile | null>(null);
-  const [selectedOpponentId, setSelectedOpponentId] = useState<string | null>(null);
   const [streamState, setStreamState] = useState<StreamState>({
     isStreaming: false,
     currentRole: null,
@@ -41,21 +29,9 @@ export function DebateArena() {
   const [error, setError] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [currentRound, setCurrentRound] = useState(0);
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const opponentRef = useRef<OpponentProfile | null>(null);
 
-  // agent-vs-user specific state
-  const [waitingForUser, setWaitingForUser] = useState(false);
-  const [userInput, setUserInput] = useState('');
-  const [debateId, setDebateId] = useState<string | null>(null);
-  const [isSubmittingReply, setIsSubmittingReply] = useState(false);
-  const [proponent, setProponent] = useState<OpponentProfile | null>(null); // for agent-vs-agent: the "user side" AI expert
-  const userInputRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const TOTAL_ROUNDS = 5;
   const { history, saveDebate } = useDebateHistory(session?.user?.id);
 
   const suggestedTopics = [
@@ -67,201 +43,18 @@ export function DebateArena() {
     '远程办公是未来趋势吗？',
   ];
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamState.currentContent, waitingForUser]);
-
-  // Auto-focus user input when waiting
-  useEffect(() => {
-    if (waitingForUser && userInputRef.current) {
-      userInputRef.current.focus();
-    }
-  }, [waitingForUser]);
-
-  const handleSSEEvent = useCallback((event: string, data: string) => {
-    try {
-      const parsed = JSON.parse(data);
-
-      switch (event) {
-        case 'init':
-          if (parsed.opponentProfile) {
-            const op = parsed.opponentProfile as OpponentProfile;
-            setOpponent(op);
-            opponentRef.current = op;
-            setDebateId(parsed.id);
-          }
-          if (parsed.proponentProfile) {
-            setProponent(parsed.proponentProfile as OpponentProfile);
-          }
-          break;
-
-        case 'start':
-          if (parsed.role === 'opponent') {
-            setCurrentRound((prev) => prev + 1);
-          }
-          setStreamState({
-            isStreaming: true,
-            currentRole: parsed.role,
-            currentContent: '',
-          });
-          break;
-
-        case 'chunk':
-          setStreamState((prev) => ({
-            ...prev,
-            currentContent: prev.currentContent + parsed.content,
-          }));
-          break;
-
-        case 'message':
-          setMessages((prev) => [...prev, parsed as DebateMessage]);
-          setStreamState({
-            isStreaming: true,
-            currentRole: null,
-            currentContent: '',
-          });
-          break;
-
-        case 'waiting_for_user':
-          setWaitingForUser(true);
-          setCurrentRound(parsed.round || 0);
-          setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
-          break;
-
-        case 'synthesizing':
-          setIsSynthesizing(true);
-          break;
-
-        case 'synthesis':
-          setIsSynthesizing(false);
-          setSynthesis(parsed as DebateSynthesis);
-          break;
-
-        case 'done':
-          if (parsed.messages) {
-            const opponentProfile = opponentRef.current;
-            if (opponentProfile) {
-              const completedDebate: DebateSession = {
-                id: parsed.id || debateId || `debate-${Date.now()}`,
-                topic: parsed.topic || topic.trim(),
-                userProfile: {
-                  id: session?.user?.id || '',
-                  name: session?.user?.name || '我',
-                  avatar: session?.user?.image,
-                  bio: session?.user?.bio,
-                },
-                opponentProfile,
-                messages: parsed.messages,
-                synthesis: parsed.synthesis,
-                status: 'completed',
-                createdAt: Date.now(),
-              };
-              saveDebate(completedDebate);
-            }
-          }
-          setWaitingForUser(false);
-          setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
-          break;
-
-        case 'error':
-          setError(parsed.message || '发生错误');
-          setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
-          break;
-
-        default:
-          // Legacy event handling for non-typed events (agent-vs-agent / agent-vs-user-agent)
-          if (parsed.opponentProfile) {
-            const op = parsed.opponentProfile as OpponentProfile;
-            setOpponent(op);
-            opponentRef.current = op;
-            setDebateId(parsed.id);
-          } else if (parsed.role && parsed.name && !parsed.content && !parsed.timestamp) {
-            if (parsed.role === 'opponent') {
-              setCurrentRound((prev) => prev + 1);
-            }
-            setStreamState({
-              isStreaming: true,
-              currentRole: parsed.role,
-              currentContent: '',
-            });
-          } else if (parsed.role && parsed.content && !parsed.timestamp) {
-            setStreamState((prev) => ({
-              ...prev,
-              currentContent: prev.currentContent + parsed.content,
-            }));
-          } else if (parsed.timestamp) {
-            setMessages((prev) => [...prev, parsed as DebateMessage]);
-            setStreamState({
-              isStreaming: true,
-              currentRole: null,
-              currentContent: '',
-            });
-          } else if ('consensus' in parsed && !parsed.messages) {
-            setIsSynthesizing(false);
-            setSynthesis(parsed as DebateSynthesis);
-          } else if (Object.keys(parsed).length === 0) {
-            setIsSynthesizing(true);
-          } else if (parsed.messages) {
-            const opponentProfile = opponentRef.current;
-            if (opponentProfile) {
-              const completedDebate: DebateSession = {
-                id: parsed.id || debateId || `debate-${Date.now()}`,
-                topic: topic.trim(),
-                userProfile: {
-                  id: session?.user?.id || '',
-                  name: session?.user?.name || '我',
-                  avatar: session?.user?.image,
-                  bio: session?.user?.bio,
-                },
-                opponentProfile,
-                messages: parsed.messages,
-                synthesis: parsed.synthesis,
-                status: 'completed',
-                createdAt: Date.now(),
-              };
-              saveDebate(completedDebate);
-            }
-          }
-          break;
-      }
-    } catch {
-      // ignore parse errors
-    }
-  }, [debateId, topic, session, saveDebate]);
-
-  const cancelDebate = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
-    setIsSynthesizing(false);
-    setWaitingForUser(false);
-    setDebateId(null);
-  }, []);
-
   const startDebate = useCallback(async () => {
-    if (!topic.trim()) return;
-    if (!session?.user) { openLoginModal(); return; }
+    if (!topic.trim() || !session?.user) return;
 
     setMessages([]);
     setSynthesis(null);
     setOpponent(null);
-    setProponent(null);
     opponentRef.current = null;
     setError(null);
     setShowReport(false);
-    setCurrentRound(0);
-    setIsSynthesizing(false);
-    setWaitingForUser(false);
-    setDebateId(null);
-    setUserInput('');
     setStreamState({ isStreaming: true, currentRole: null, currentContent: '' });
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    if (abortControllerRef.current) abortControllerRef.current.abort();
     abortControllerRef.current = new AbortController();
 
     try {
@@ -270,8 +63,6 @@ export function DebateArena() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: topic.trim(),
-          mode,
-          opponentId: selectedOpponentId,
           userProfile: {
             id: session.user.id,
             name: session.user.name,
@@ -282,70 +73,75 @@ export function DebateArena() {
         signal: abortControllerRef.current.signal,
       });
 
-      if (!response.ok) {
-        throw new Error('辩论生成失败');
-      }
+      if (!response.ok) throw new Error('辩论生成失败');
 
-      await consumeSSEStream(response, handleSSEEvent);
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      setError(err instanceof Error ? err.message : '发生未知错误');
-    } finally {
-      // Don't reset streaming state — event handlers already manage it.
-      // For agent-vs-user mode, waitingForUser is set by the event handler
-      // before this finally runs, so we must not blindly reset.
-      setIsSynthesizing(false);
-    }
-  }, [topic, session, saveDebate, selectedOpponentId, mode, handleSSEEvent]);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('无法读取响应');
 
-  const submitUserReply = useCallback(async () => {
-    if (!userInput.trim() || !debateId || isSubmittingReply) return;
-    if (!session?.user) { openLoginModal(); return; }
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let debateId = '';
+      let streamOpponent: OpponentProfile | null = null;
 
-    setIsSubmittingReply(true);
-    setWaitingForUser(false);
-    setError(null);
-    setStreamState({ isStreaming: true, currentRole: null, currentContent: '' });
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-    const replyContent = userInput.trim();
-    setUserInput('');
-
-    try {
-      const response = await fetch('/api/debate/reply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          debateId,
-          content: replyContent,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
-
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        throw new Error(errBody.error || '回复失败');
-      }
-
-      await consumeSSEStream(response, handleSSEEvent);
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      setError(err instanceof Error ? err.message : '发生未知错误');
-      setWaitingForUser(true); // Let user retry
-    } finally {
-      setIsSubmittingReply(false);
-      setStreamState((prev) => {
-        if (prev.isStreaming) {
-          return { isStreaming: false, currentRole: null, currentContent: '' };
+        for (const line of lines) {
+          if (line.startsWith('event: ')) continue;
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.opponentProfile) {
+                streamOpponent = parsed.opponentProfile as OpponentProfile;
+                setOpponent(streamOpponent);
+                opponentRef.current = streamOpponent;
+                debateId = parsed.id;
+              } else if (parsed.role && parsed.name && !parsed.content && !parsed.timestamp) {
+                setStreamState({ isStreaming: true, currentRole: parsed.role, currentContent: '' });
+              } else if (parsed.role && parsed.content && !parsed.timestamp) {
+                setStreamState((prev) => ({ ...prev, currentContent: prev.currentContent + parsed.content }));
+              } else if (parsed.timestamp) {
+                setMessages((prev) => [...prev, parsed as DebateMessage]);
+                setStreamState({ isStreaming: true, currentRole: null, currentContent: '' });
+              } else if (parsed.consensus) {
+                setSynthesis(parsed as DebateSynthesis);
+              } else if (parsed.messages) {
+                const opponentProfile = streamOpponent || opponentRef.current;
+                if (!opponentProfile) throw new Error('Missing opponent profile');
+                const completedDebate: DebateSession = {
+                  id: debateId || `debate-${Date.now()}`,
+                  topic: topic.trim(),
+                  userProfile: {
+                    id: session.user.id!,
+                    name: session.user.name!,
+                    avatar: session.user.image,
+                    bio: session.user.bio,
+                  },
+                  opponentProfile,
+                  messages: parsed.messages,
+                  synthesis: parsed.synthesis,
+                  status: 'completed',
+                  createdAt: Date.now(),
+                };
+                saveDebate(completedDebate);
+              }
+            } catch { /* ignore */ }
+          }
         }
-        return prev;
-      });
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : '发生未知错误');
+    } finally {
+      setStreamState({ isStreaming: false, currentRole: null, currentContent: '' });
     }
-  }, [userInput, debateId, isSubmittingReply, session, handleSSEEvent]);
+  }, [topic, session, saveDebate]);
 
   const loadHistoryDebate = useCallback((historicalDebate: DebateSession) => {
     setMessages(historicalDebate.messages);
@@ -355,437 +151,282 @@ export function DebateArena() {
     setTopic(historicalDebate.topic);
     setShowHistory(false);
     setShowReport(false);
-    setCurrentRound(TOTAL_ROUNDS);
-    setIsSynthesizing(false);
-    setWaitingForUser(false);
-    setDebateId(null);
-    setProponent(null);
   }, []);
 
-  const isLoading = streamState.isStreaming || isSubmittingReply;
+  // Unauthenticated state — Zhihu style
+  if (!session?.user) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-[694px_296px] gap-[10px]">
+        <div className="min-w-0">
+          <div className="bg-white p-5 border border-[var(--zh-border)] rounded-[2px]">
+            <h2 className="text-[20px] font-bold text-[var(--zh-text-main)] mb-1">辩论竞技场</h2>
+            <p className="text-[14px] text-[var(--zh-text-gray)] mb-6">让你的 AI Agent 与对手展开激烈对线</p>
 
-  // Display name for the "user" side depends on mode
-  const userSideName = mode === 'agent-vs-agent' && proponent
-    ? proponent.name
-    : mode === 'agent-vs-user'
-      ? (session?.user?.name || '我')
-      : `${session?.user?.name || '我'} 的 Agent`;
+            {/* Disabled topic input */}
+            <div className="mb-4">
+              <label className="block text-[14px] font-medium text-[var(--zh-text-secondary)] mb-1.5">辩论话题</label>
+              <input
+                type="text"
+                disabled
+                placeholder="登录后输入一个有争议的话题..."
+                className="w-full px-3 py-2.5 border border-[var(--zh-border)] rounded-[3px] text-[15px] bg-[var(--zh-bg)] text-[var(--zh-text-gray)] cursor-not-allowed"
+              />
+            </div>
 
-  const displayMessages = streamState.currentRole && streamState.currentContent
+            <div className="mb-5">
+              <p className="text-[13px] text-[var(--zh-text-gray)] mb-2">热门话题</p>
+              <div className="flex flex-wrap gap-1.5">
+                {suggestedTopics.map((t) => (
+                  <span key={t} className="px-3 py-1 text-[13px] bg-[var(--zh-bg)] text-[var(--zh-text-gray)] rounded-[3px]">{t}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Login CTA */}
+            <div className="border-t border-[var(--zh-border)] pt-5 text-center">
+              <p className="text-[14px] text-[var(--zh-text-gray)] mb-3">登录后即可开始辩论</p>
+              <button
+                onClick={openLoginModal}
+                className="px-6 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] text-[14px] font-medium hover:bg-[var(--zh-blue-hover)] transition-colors"
+              >
+                登录 / 注册
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="min-w-0 hidden lg:block">
+          <div className="bg-white p-4 border border-[var(--zh-border)] rounded-[2px]">
+            <h3 className="text-[16px] font-bold text-[var(--zh-text-main)] mb-2">辩论规则</h3>
+            <div className="space-y-2 text-[13px] text-[var(--zh-text-secondary)] leading-relaxed">
+              <p>1. 输入一个有争议的话题</p>
+              <p>2. 系统匹配一位 AI 对手</p>
+              <p>3. 你的 Agent 与对手进行 5 轮辩论</p>
+              <p>4. AI 裁判生成认知博弈报告</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isLoading = streamState.isStreaming;
+  const displayMessages = streamState.currentRole
     ? [
       ...messages,
       {
         role: streamState.currentRole,
-        name: streamState.currentRole === 'user' ? userSideName : opponent?.name || '对手',
+        name: streamState.currentRole === 'user' ? session.user.name! : opponent?.name || '对手',
         content: streamState.currentContent,
         timestamp: Date.now(),
       },
     ]
     : messages;
 
-  const showTypingIndicator = isLoading && streamState.currentRole !== null && !streamState.currentContent;
-  const debateStarted = (displayMessages.length > 0 || isLoading || waitingForUser) && opponent;
-
   return (
-    <div className="max-w-[1000px] mx-auto flex gap-5">
-      {/* Main Column */}
-      <div className="flex-1 min-w-0 space-y-3">
-        {/* Mode Tabs — Zhihu style */}
-        <div className="bg-white rounded-[2px] border border-[var(--zh-border)]">
-          <div className="flex border-b border-[var(--zh-border)]">
-            {MODE_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => !isLoading && !opt.disabled && setMode(opt.key)}
-                disabled={isLoading || opt.disabled}
-                className={`flex-1 py-3 text-[14px] font-medium transition-colors relative ${
-                  opt.disabled
-                    ? 'text-[var(--zh-text-gray)] opacity-50 cursor-not-allowed'
-                    : mode === opt.key
-                      ? 'text-[var(--zh-blue)]'
-                      : 'text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)]'
-                } disabled:cursor-not-allowed`}
-              >
-                {opt.label}
-                {opt.disabled && <span className="ml-1 text-[11px] text-[var(--zh-text-gray)]">即将上线</span>}
-                {mode === opt.key && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-[var(--zh-blue)] rounded-t" />
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="px-4 py-2">
-            <p className="text-[13px] text-[var(--zh-text-gray)]">
-              {MODE_OPTIONS.find((o) => o.key === mode)?.desc}
-            </p>
-          </div>
-        </div>
-
-        {/* Topic Input — Zhihu card style */}
-        <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="输入一个有争议的话题..."
-              className="flex-1 px-3 py-2 bg-[var(--zh-bg)] border border-transparent rounded text-[14px] text-[var(--zh-text-main)] placeholder-[var(--zh-text-gray)] outline-none focus:bg-white focus:border-[var(--zh-text-gray)] transition-all"
-              onKeyDown={(e) => e.key === 'Enter' && !isLoading && !waitingForUser && startDebate()}
-              disabled={isLoading || waitingForUser}
-            />
-            {isLoading && !waitingForUser ? (
-              <button
-                onClick={cancelDebate}
-                className="px-4 py-2 bg-[var(--zh-red)] text-white rounded text-[14px] font-medium hover:bg-red-700 transition-colors"
-              >
-                停止辩论
-              </button>
-            ) : (
-              <button
-                onClick={startDebate}
-                disabled={!topic.trim() || waitingForUser}
-                className="px-4 py-2 bg-[var(--zh-blue)] text-white rounded text-[14px] font-medium hover:bg-[var(--zh-blue-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {waitingForUser ? '辩论进行中' : '开始辩论'}
-              </button>
-            )}
+    <div className="grid grid-cols-1 lg:grid-cols-[694px_296px] gap-[10px]">
+      {/* Left: Main Content */}
+      <div className="min-w-0">
+        {/* Topic Input Card */}
+        <div className="bg-white p-4 md:p-5 border border-[var(--zh-border)] rounded-[2px] mb-[10px]">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[20px] font-bold text-[var(--zh-text-main)]">
+              {showHistory ? '历史记录' : '辩论竞技场'}
+            </h2>
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="text-[13px] text-[var(--zh-blue)] hover:text-[var(--zh-blue-hover)] transition-colors"
+            >
+              {showHistory ? '返回辩论' : `历史记录 (${history.length})`}
+            </button>
           </div>
 
-          {/* Suggested Topics */}
-          {!debateStarted && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {suggestedTopics.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTopic(t)}
+          {showHistory ? (
+            <DebateHistory history={history} onSelect={loadHistoryDebate} />
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="输入一个有争议的话题..."
+                  className="flex-1 px-3 py-2.5 border border-[var(--zh-border)] rounded-[3px] text-[15px] text-[var(--zh-text-main)] placeholder:text-[var(--zh-text-gray)] focus:outline-none focus:border-[var(--zh-blue)] transition-colors"
+                  onKeyDown={(e) => e.key === 'Enter' && !isLoading && startDebate()}
                   disabled={isLoading}
-                  className="px-2.5 py-1 text-[13px] text-[var(--zh-text-gray)] bg-[var(--zh-bg)] rounded hover:bg-[var(--zh-border)] hover:text-[var(--zh-text-main)] transition-colors disabled:cursor-not-allowed"
+                />
+                <button
+                  onClick={startDebate}
+                  disabled={isLoading || !topic.trim()}
+                  className="px-5 py-2.5 bg-[var(--zh-blue)] text-white rounded-[3px] text-[14px] font-medium hover:bg-[var(--zh-blue-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                 >
-                  {t}
+                  {isLoading ? '对线中...' : '开始对线'}
                 </button>
-              ))}
-            </div>
+              </div>
+
+              <div className="mt-3">
+                <p className="text-[13px] text-[var(--zh-text-gray)] mb-1.5">热门话题</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestedTopics.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTopic(t)}
+                      className="px-3 py-1 text-[13px] bg-[var(--zh-bg)] text-[var(--zh-text-secondary)] rounded-[3px] hover:bg-[#EBF5FF] hover:text-[var(--zh-blue)] transition-colors"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </div>
 
-        {/* Opponent Selection */}
-        {!debateStarted && (
-          <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-            <p className="text-[13px] text-[var(--zh-text-gray)] mb-3">选择对手（不选则自动匹配）</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {OPPONENT_PROFILES.map((op) => (
-                <button
-                  key={op.id}
-                  onClick={() => setSelectedOpponentId(selectedOpponentId === op.id ? null : op.id)}
-                  className={`flex items-center gap-3 p-3 rounded text-left transition-all border ${
-                    selectedOpponentId === op.id
-                      ? 'border-[var(--zh-blue)] bg-[var(--zh-blue-light)]'
-                      : 'border-[var(--zh-border)] hover:border-[var(--zh-text-gray)] hover:bg-[var(--zh-bg)]'
-                  }`}
-                >
-                  <div className="w-9 h-9 rounded-full bg-[var(--zh-bg)] flex items-center justify-center text-[14px] font-bold text-[var(--zh-text-secondary)] flex-shrink-0">
-                    {op.name.charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-medium text-[var(--zh-text-main)] leading-tight">{op.name}</p>
-                    <p className="text-[12px] text-[var(--zh-text-gray)] leading-tight mt-0.5 truncate">{op.title} · {op.stance}</p>
-                  </div>
-                  {selectedOpponentId === op.id && (
-                    <span className="ml-auto text-[var(--zh-blue)] text-[12px] flex-shrink-0">已选</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Error */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-[2px] text-[14px]">
+          <div className="bg-[#FFF2F0] border border-[#FFCCC7] text-[#FF4D4F] px-4 py-3 rounded-[2px] mb-[10px] text-[14px]">
             {error}
           </div>
         )}
 
         {/* Debate Content */}
-        {debateStarted && (
+        {(displayMessages.length > 0 || isLoading) && opponent && !showHistory && (
           <>
-            {/* Debate Header — like a Zhihu question header */}
-            <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-              <h2 className="text-[18px] font-semibold text-[var(--zh-text-main)] mb-2">{topic}</h2>
+            {/* Opponent Info */}
+            <div className="bg-white p-4 border border-[var(--zh-border)] rounded-[2px] mb-[10px]">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 text-[13px] text-[var(--zh-text-gray)]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-5 h-5 rounded-full bg-[var(--zh-bg)] flex items-center justify-center text-[10px] font-bold">{opponent.name.charAt(0)}</span>
-                    {opponent.name}
-                  </span>
-                  <span>vs</span>
-                  <span className="flex items-center gap-1.5">
-                    {mode === 'agent-vs-agent' && proponent ? (
-                      <span className="w-5 h-5 rounded-full bg-[var(--zh-bg)] flex items-center justify-center text-[10px] font-bold">
-                        {proponent.name.charAt(0)}
-                      </span>
-                    ) : session?.user?.image ? (
-                      <Image src={session.user.image} alt="" width={20} height={20} className="w-5 h-5 rounded-full object-cover" unoptimized />
-                    ) : (
-                      <span className="w-5 h-5 rounded-full bg-[var(--zh-bg)] flex items-center justify-center text-[10px] font-bold">
-                        {(session?.user?.name || '我').charAt(0)}
-                      </span>
-                    )}
-                    {userSideName}
-                  </span>
-                </div>
-                {(isLoading || waitingForUser) && (
-                  <div className="flex items-center gap-2 text-[13px] text-[var(--zh-text-gray)]">
-                    {isSynthesizing ? (
-                      <span className="flex items-center gap-1.5">
-                        <span className="animate-spin rounded-full h-3.5 w-3.5 border border-[var(--zh-blue)] border-t-transparent" />
-                        生成报告中
-                      </span>
-                    ) : waitingForUser ? (
-                      <span className="text-[var(--zh-blue)] font-medium">轮到你发言</span>
-                    ) : (
-                      <span>第 {currentRound}/{TOTAL_ROUNDS} 轮</span>
-                    )}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-[4px] bg-[#FF6A00] flex items-center justify-center text-white text-[15px] font-bold">
+                    {opponent.name.charAt(0)}
                   </div>
-                )}
-              </div>
-
-              {/* Progress bar */}
-              {(isLoading || waitingForUser) && (
-                <div className="mt-3 h-1 bg-[var(--zh-bg)] rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${isSynthesizing ? 'bg-[var(--zh-blue)] animate-pulse' : 'bg-[var(--zh-blue)]'}`}
-                    style={{ width: `${isSynthesizing ? 100 : (currentRound / TOTAL_ROUNDS) * 100}%` }}
-                  />
+                  <div>
+                    <p className="text-[15px] font-bold text-[var(--zh-text-main)]">{opponent.name}</p>
+                    <p className="text-[13px] text-[var(--zh-text-gray)]">{opponent.title}</p>
+                  </div>
                 </div>
-              )}
+                <span className="text-[12px] px-2.5 py-1 bg-[#FFF7F0] text-[#FF6A00] rounded-[3px] border border-[#FFD6B3]">
+                  {opponent.stance}
+                </span>
+              </div>
             </div>
 
-            {/* Tab switch: 对话记录 / 认知报告 */}
+            {/* Tab Toggle */}
             {synthesis && (
-              <div className="bg-white rounded-[2px] border border-[var(--zh-border)] flex">
-                <button
-                  onClick={() => setShowReport(false)}
-                  className={`flex-1 py-2.5 text-[14px] font-medium transition-colors relative ${
-                    !showReport ? 'text-[var(--zh-blue)]' : 'text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)]'
-                  }`}
-                >
-                  对话记录
-                  {!showReport && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] bg-[var(--zh-blue)]" />}
-                </button>
-                <button
-                  onClick={() => setShowReport(true)}
-                  className={`flex-1 py-2.5 text-[14px] font-medium transition-colors relative ${
-                    showReport ? 'text-[var(--zh-blue)]' : 'text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)]'
-                  }`}
-                >
-                  认知报告
-                  {showReport && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-[2px] bg-[var(--zh-blue)]" />}
-                </button>
-              </div>
-            )}
-
-            {/* Synthesizing */}
-            {isSynthesizing && (
-              <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-6 text-center">
-                <div className="inline-flex items-center gap-2 text-[var(--zh-text-gray)] text-[14px]">
-                  <span className="animate-spin rounded-full h-4 w-4 border-2 border-[var(--zh-blue)] border-t-transparent" />
-                  评审正在生成认知报告...
+              <div className="bg-white border border-[var(--zh-border)] rounded-[2px] mb-[10px]">
+                <div className="h-[42px] flex items-center border-b border-[var(--zh-border)]">
+                  <button
+                    onClick={() => setShowReport(false)}
+                    className={`h-full px-5 text-[14px] font-medium transition-colors border-b-2 ${
+                      !showReport
+                        ? 'border-[var(--zh-blue)] text-[var(--zh-blue)]'
+                        : 'border-transparent text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)]'
+                    }`}
+                  >
+                    对话记录
+                  </button>
+                  <button
+                    onClick={() => setShowReport(true)}
+                    className={`h-full px-5 text-[14px] font-medium transition-colors border-b-2 ${
+                      showReport
+                        ? 'border-[var(--zh-blue)] text-[var(--zh-blue)]'
+                        : 'border-transparent text-[var(--zh-text-gray)] hover:text-[var(--zh-text-secondary)]'
+                    }`}
+                  >
+                    认知报告
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* Messages or Report */}
+            {/* Chat / Report */}
             {!showReport ? (
-              <div className="space-y-0">
-                {displayMessages.map((msg, idx) => (
-                  <DebateAnswerCard
-                    key={idx}
-                    message={msg}
-                    isUser={msg.role === 'user'}
-                    userAvatar={session?.user?.image}
-                    opponentName={opponent.name}
-                    roundIndex={Math.floor(idx / 2) + 1}
+              <div className="bg-white border border-[var(--zh-border)] rounded-[2px] overflow-hidden">
+                <div className="px-4 py-3 border-b border-[var(--zh-border)]">
+                  <h3 className="text-[15px] font-bold text-[var(--zh-text-main)]">辩论话题：{topic}</h3>
+                </div>
+                <div className="max-h-[500px] overflow-y-auto">
+                  <ChatList
+                    messages={displayMessages}
+                    userAvatar={session.user.image}
+                    isGenerating={isLoading && streamState.currentRole !== null}
+                    currentSpeaker={streamState.currentRole || undefined}
                   />
-                ))}
-                {showTypingIndicator && (
-                  <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-                    <div className="flex items-center gap-2 text-[var(--zh-text-gray)] text-[14px]">
-                      <span className="animate-spin rounded-full h-3.5 w-3.5 border border-[var(--zh-text-gray)] border-t-transparent" />
-                      {streamState.currentRole === 'user' ? userSideName : opponent.name} 正在发言...
-                    </div>
-                  </div>
-                )}
-
-                {/* User Input Area for agent-vs-user mode */}
-                {waitingForUser && mode === 'agent-vs-user' && (
-                  <div className="bg-white rounded-[2px] border-2 border-[var(--zh-blue)] p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-6 h-6 rounded-full bg-[var(--zh-blue-light)] flex items-center justify-center text-[11px] font-bold text-[var(--zh-blue)]">
-                        {(session?.user?.name || '我').charAt(0)}
-                      </span>
-                      <span className="text-[14px] font-medium text-[var(--zh-text-main)]">
-                        轮到你发言（第 {currentRound + 1}/{TOTAL_ROUNDS} 轮）
-                      </span>
-                    </div>
-                    <textarea
-                      ref={userInputRef}
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                          e.preventDefault();
-                          submitUserReply();
-                        }
-                      }}
-                      placeholder="输入你的论点，反驳对方的观点..."
-                      className="w-full min-h-[120px] px-3 py-2 bg-[var(--zh-bg)] border border-transparent rounded text-[14px] text-[var(--zh-text-main)] placeholder-[var(--zh-text-gray)] outline-none focus:bg-white focus:border-[var(--zh-blue)] transition-all resize-y"
-                      disabled={isSubmittingReply}
-                    />
-                    <div className="flex items-center justify-between mt-3">
-                      <span className="text-[12px] text-[var(--zh-text-gray)]">
-                        Ctrl + Enter 发送
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={cancelDebate}
-                          className="px-3 py-1.5 text-[13px] text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)] transition-colors"
-                        >
-                          结束辩论
-                        </button>
-                        <button
-                          onClick={submitUserReply}
-                          disabled={!userInput.trim() || isSubmittingReply}
-                          className="px-4 py-1.5 bg-[var(--zh-blue)] text-white rounded text-[13px] font-medium hover:bg-[var(--zh-blue-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {isSubmittingReply ? '发送中...' : '发表观点'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div ref={messagesEndRef} />
+                </div>
               </div>
             ) : (
               synthesis && (
                 <SynthesisReport
                   synthesis={synthesis}
-                  userName={userSideName}
+                  userName={session.user.name || '我的Agent'}
                   opponentName={opponent.name}
                 />
               )
             )}
-
           </>
         )}
       </div>
 
-      {/* Sidebar */}
-      <div className="hidden lg:block w-[296px] flex-shrink-0 space-y-3">
-        {/* About this mode */}
-        <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-          <h3 className="text-[15px] font-semibold text-[var(--zh-text-main)] mb-2">关于辩论</h3>
-          <p className="text-[13px] text-[var(--zh-text-gray)] leading-relaxed">
-            {mode === 'agent-vs-user'
-              ? `你将亲自下场，与 AI 专家展开 ${TOTAL_ROUNDS} 轮辩论。对手先发言，然后你回复，最终生成认知报告。`
-              : mode === 'agent-vs-agent'
-                ? `两个 AI 专家将从不同立场展开 ${TOTAL_ROUNDS} 轮激烈辩论，你可以旁观并学习不同视角，最终生成认知报告。`
-                : `你的 AI 分身将代你出战，与 AI 专家展开 ${TOTAL_ROUNDS} 轮辩论，最终生成认知报告。`
-            }
-          </p>
-        </div>
-
-        {/* History */}
-        <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4 sticky top-[68px]">
-          <h3 className="text-[15px] font-semibold text-[var(--zh-text-main)] mb-3">
-            辩论历史 <span className="text-[var(--zh-text-gray)] font-normal">({history.length})</span>
-          </h3>
-          <DebateHistory history={history} onSelect={loadHistoryDebate} />
-        </div>
-      </div>
-
-      {/* Mobile History */}
-      <div className="lg:hidden fixed bottom-20 right-4 z-40">
-        <button
-          onClick={() => setShowHistory(!showHistory)}
-          className="w-10 h-10 rounded-full bg-white shadow border border-[var(--zh-border)] flex items-center justify-center text-[var(--zh-text-gray)] hover:text-[var(--zh-text-main)]"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="10" /></svg>
-        </button>
-      </div>
-
-      {showHistory && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black/40" onClick={() => setShowHistory(false)}>
-          <div
-            className="absolute right-0 top-0 bottom-0 w-80 max-w-[85vw] bg-white p-4 overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[15px] font-semibold text-[var(--zh-text-main)]">辩论历史 ({history.length})</h3>
-              <button onClick={() => setShowHistory(false)} className="text-[13px] text-[var(--zh-text-gray)]">关闭</button>
-            </div>
-            <DebateHistory history={history} onSelect={loadHistoryDebate} />
+      {/* Right: Sidebar */}
+      <div className="min-w-0 hidden lg:block">
+        {/* Rules */}
+        <div className="bg-white p-4 border border-[var(--zh-border)] rounded-[2px] mb-[10px]">
+          <h3 className="text-[16px] font-bold text-[var(--zh-text-main)] mb-2">辩论规则</h3>
+          <div className="space-y-2 text-[13px] text-[var(--zh-text-secondary)] leading-relaxed">
+            <p>1. 输入一个有争议的话题</p>
+            <p>2. 系统匹配一位 AI 对手</p>
+            <p>3. 你的 Agent 与对手进行 5 轮辩论</p>
+            <p>4. AI 裁判生成认知博弈报告</p>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
 
-/* Zhihu answer-card style debate message */
-function DebateAnswerCard({
-  message,
-  isUser,
-  userAvatar,
-  opponentName,
-  roundIndex,
-}: {
-  message: DebateMessage;
-  isUser: boolean;
-  userAvatar?: string | null;
-  opponentName: string;
-  roundIndex: number;
-}) {
-  return (
-    <div className="bg-white rounded-[2px] border border-[var(--zh-border)] mb-[-1px]">
-      {/* Author header */}
-      <div className="px-4 pt-3 pb-2 flex items-center gap-2.5">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0 ${
-          isUser ? 'bg-[var(--zh-blue-light)] text-[var(--zh-blue)]' : 'bg-[var(--zh-orange-light)] text-[var(--zh-orange)]'
-        }`}>
-          {isUser && userAvatar ? (
-            <Image src={userAvatar} alt="" width={32} height={32} className="w-full h-full rounded-full object-cover" unoptimized />
-          ) : (
-            message.name.charAt(0)
-          )}
-        </div>
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[14px] font-medium text-[var(--zh-text-main)]">{message.name}</span>
-          <span className={`px-1.5 py-0.5 text-[11px] rounded ${
-            isUser ? 'bg-[var(--zh-blue-light)] text-[var(--zh-blue)]' : 'bg-[var(--zh-orange-light)] text-[var(--zh-orange)]'
-          }`}>
-            {isUser ? '正方' : '反方'}
-          </span>
-          <span className="text-[12px] text-[var(--zh-text-gray)]">第 {roundIndex} 轮</span>
-        </div>
-      </div>
+        {/* Opponent Info (when active) */}
+        {opponent && (
+          <div className="bg-white p-4 border border-[var(--zh-border)] rounded-[2px] mb-[10px]">
+            <h3 className="text-[16px] font-bold text-[var(--zh-text-main)] mb-3">对手信息</h3>
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="w-8 h-8 rounded-[4px] bg-[#FF6A00] flex items-center justify-center text-white text-[12px] font-bold">
+                {opponent.name.charAt(0)}
+              </div>
+              <div>
+                <div className="text-[14px] font-medium text-[var(--zh-text-main)]">{opponent.name}</div>
+                <div className="text-[12px] text-[var(--zh-text-gray)]">{opponent.title}</div>
+              </div>
+            </div>
+            <div className="text-[12px] text-[#FF6A00] bg-[#FFF7F0] px-2 py-1 rounded-[3px] inline-block">
+              {opponent.stance}
+            </div>
+          </div>
+        )}
 
-      {/* Content */}
-      <div className="px-4 pb-3">
-        <p className="text-[15px] text-[var(--zh-text-main)] leading-relaxed whitespace-pre-wrap">{message.content}</p>
-      </div>
-
-      {/* Footer actions — Zhihu style */}
-      <div className="px-4 pb-3 flex items-center gap-4 text-[var(--zh-text-gray)]">
-        <button className="flex items-center gap-1 text-[13px] hover:text-[var(--zh-blue)] transition-colors">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m18 15-6-6-6 6" /></svg>
-          赞同
-        </button>
-        <button className="flex items-center gap-1 text-[13px] hover:text-[var(--zh-blue)] transition-colors">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-          评论
-        </button>
+        {/* Recent History */}
+        {history.length > 0 && (
+          <div className="bg-white p-4 border border-[var(--zh-border)] rounded-[2px]">
+            <h3 className="text-[16px] font-bold text-[var(--zh-text-main)] mb-2">最近辩论</h3>
+            <div className="space-y-0">
+              {history.slice(0, 5).map(h => (
+                <button
+                  key={h.id}
+                  onClick={() => loadHistoryDebate(h)}
+                  className="w-full text-left py-2.5 border-b border-[var(--zh-border)] last:border-b-0 hover:text-[var(--zh-blue)] transition-colors"
+                >
+                  <div className="text-[14px] text-[var(--zh-text-main)] truncate">{h.topic}</div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[12px] text-[var(--zh-text-gray)]">vs {h.opponentProfile.name}</span>
+                    {h.synthesis && (
+                      <span className={`text-[11px] font-medium ${
+                        h.synthesis.winner === 'user' ? 'text-[#00B96B]'
+                          : h.synthesis.winner === 'opponent' ? 'text-[#FF4D4F]'
+                            : 'text-[var(--zh-text-gray)]'
+                      }`}>
+                        {h.synthesis.winner === 'user' ? '胜' : h.synthesis.winner === 'opponent' ? '负' : '平'}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

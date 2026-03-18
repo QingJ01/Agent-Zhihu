@@ -10,69 +10,64 @@ interface SynthesisReportProps {
 
 export function SynthesisReport({ synthesis, userName, opponentName }: SynthesisReportProps) {
   const winnerName = synthesis.winner === 'user' ? userName : synthesis.winner === 'opponent' ? opponentName : '平局';
-  const winnerColor = synthesis.winner === 'user' ? 'text-[var(--zh-blue)]' : synthesis.winner === 'opponent' ? 'text-[var(--zh-orange)]' : 'text-[var(--zh-text-gray)]';
+  const isUserWin = synthesis.winner === 'user';
+  const isTie = synthesis.winner === 'tie';
 
   return (
-    <div className="space-y-[-1px]">
+    <div className="bg-white border border-[var(--zh-border)] rounded-[2px] overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-[var(--zh-border)]">
+        <h2 className="text-[18px] font-bold text-[var(--zh-text-main)]">认知博弈报告</h2>
+      </div>
+
       {/* Winner */}
-      <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
+      <div className="px-5 py-4 border-b border-[var(--zh-border)]">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-[13px] text-[var(--zh-text-gray)] mb-1">本场胜者</p>
-            <p className={`text-[20px] font-semibold ${winnerColor}`}>{winnerName}</p>
+            <p className={`text-[20px] font-bold ${isUserWin ? 'text-[var(--zh-blue)]' : isTie ? 'text-[var(--zh-text-gray)]' : 'text-[#FF6A00]'}`}>
+              {winnerName}
+            </p>
           </div>
-          <span className="text-[28px]">
-            {synthesis.winner === 'user' ? '🏆' : synthesis.winner === 'opponent' ? '🎯' : '🤝'}
-          </span>
+          <div className={`w-12 h-12 rounded-[4px] flex items-center justify-center text-[24px] ${
+            isUserWin ? 'bg-[#EBF5FF]' : isTie ? 'bg-[var(--zh-bg)]' : 'bg-[#FFF7F0]'
+          }`}>
+            {isUserWin ? '🏆' : isTie ? '🤝' : '🎯'}
+          </div>
         </div>
-        <p className="mt-2 text-[14px] text-[var(--zh-text-secondary)]">{synthesis.winnerReason}</p>
+        <p className="mt-2 text-[14px] text-[var(--zh-text-secondary)] leading-relaxed">{synthesis.winnerReason}</p>
       </div>
 
       {/* Consensus */}
-      {synthesis.consensus.length > 0 && (
-        <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-          <h3 className="text-[15px] font-semibold text-[var(--zh-text-main)] mb-2">双方共识</h3>
-          <ul className="space-y-1.5">
-            {synthesis.consensus.map((item, idx) => (
-              <li key={idx} className="text-[14px] text-[var(--zh-text-secondary)] flex items-start gap-2">
-                <span className="text-[var(--zh-green)] mt-0.5 flex-shrink-0">·</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <div className="px-5 py-4 border-b border-[var(--zh-border)]">
+        <h3 className="text-[15px] font-bold text-[#00B96B] mb-2">双方共识</h3>
+        {synthesis.consensus.map((item, index) => (
+          <p key={index} className="text-[14px] text-[var(--zh-text-secondary)] leading-relaxed pl-3 border-l-2 border-[#B7EBD0] mb-1.5">{item}</p>
+        ))}
+      </div>
 
       {/* Disagreements */}
-      <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-        <h3 className="text-[15px] font-semibold text-[var(--zh-text-main)] mb-2">核心分歧</h3>
-        <ul className="space-y-1.5">
-          {synthesis.disagreements.map((item, idx) => (
-            <li key={idx} className="text-[14px] text-[var(--zh-text-secondary)] flex items-start gap-2">
-              <span className="text-[var(--zh-red)] mt-0.5 flex-shrink-0">·</span>
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="px-5 py-4 border-b border-[var(--zh-border)]">
+        <h3 className="text-[15px] font-bold text-[#FF4D4F] mb-2">核心分歧</h3>
+        {synthesis.disagreements.map((item, index) => (
+          <p key={index} className="text-[14px] text-[var(--zh-text-secondary)] leading-relaxed pl-3 border-l-2 border-[#FFA39E] mb-1.5">{item}</p>
+        ))}
       </div>
 
       {/* Conclusion */}
-      <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-        <h3 className="text-[15px] font-semibold text-[var(--zh-text-main)] mb-2">最终结论</h3>
-        <p className="text-[14px] text-[var(--zh-text-secondary)] leading-relaxed">{synthesis.conclusion}</p>
+      <div className="px-5 py-4 border-b border-[var(--zh-border)] bg-[var(--zh-bg)]">
+        <h3 className="text-[15px] font-bold text-[var(--zh-text-main)] mb-2">最终结论</h3>
+        <p className="text-[14px] text-[var(--zh-text-secondary)] leading-7">{synthesis.conclusion}</p>
       </div>
 
       {/* Recommendations */}
-      <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-4">
-        <h3 className="text-[15px] font-semibold text-[var(--zh-text-main)] mb-2">给你的建议</h3>
-        <ul className="space-y-1.5">
-          {synthesis.recommendations.map((item, idx) => (
-            <li key={idx} className="text-[14px] text-[var(--zh-text-secondary)] flex items-start gap-2">
-              <span className="text-[var(--zh-blue)] mt-0.5 flex-shrink-0">{idx + 1}.</span>
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="px-5 py-4">
+        <h3 className="text-[15px] font-bold text-[var(--zh-blue)] mb-2">给你的建议</h3>
+        {synthesis.recommendations.map((item, index) => (
+          <p key={index} className="text-[14px] text-[var(--zh-text-secondary)] leading-relaxed pl-3 border-l-2 border-[#D6E4FF] mb-1.5">
+            <span className="text-[var(--zh-blue)] font-medium mr-1">{index + 1}.</span>{item}
+          </p>
+        ))}
       </div>
     </div>
   );

@@ -15,20 +15,16 @@ export function ChatBubble({ message, isUser, avatar, isTyping }: ChatBubbleProp
   return (
     <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'} animate-fadeIn`}>
       <div className="flex-shrink-0">
-        <div
-          className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${
-            isUser
-              ? 'bg-gradient-to-br from-blue-500 to-purple-600'
-              : 'bg-gradient-to-br from-orange-500 to-red-600'
-          }`}
-        >
+        <div className={`w-9 h-9 rounded-[4px] flex items-center justify-center text-white font-bold text-[14px] ${
+          isUser ? 'bg-[var(--zh-blue)]' : 'bg-[#FF6A00]'
+        }`}>
           {avatar ? (
             <Image
               src={avatar}
               alt={message.name}
-              width={48}
-              height={48}
-              className="w-full h-full rounded-full object-cover"
+              width={36}
+              height={36}
+              className="w-full h-full rounded-[4px] object-cover"
               unoptimized
             />
           ) : (
@@ -36,25 +32,23 @@ export function ChatBubble({ message, isUser, avatar, isTyping }: ChatBubbleProp
           )}
         </div>
       </div>
-      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[70%]`}>
-        <span className={`text-sm font-medium mb-1 ${isUser ? 'text-blue-600' : 'text-orange-600'}`}>
+      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[75%]`}>
+        <span className={`text-[13px] font-medium mb-1 ${isUser ? 'text-[var(--zh-blue)]' : 'text-[#FF6A00]'}`}>
           {message.name}
         </span>
-        <div
-          className={`px-4 py-3 rounded-2xl ${
-            isUser
-              ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-tr-sm'
-              : 'bg-gray-100 text-gray-800 rounded-tl-sm'
-          }`}
-        >
+        <div className={`px-3.5 py-2.5 rounded-[3px] ${
+          isUser
+            ? 'bg-[#EBF5FF] text-[var(--zh-text-main)] border border-[#D6E4FF]'
+            : 'bg-[var(--zh-bg)] text-[var(--zh-text-main)] border border-[var(--zh-border)]'
+        }`}>
           {isTyping ? (
-            <div className="flex gap-1">
-              <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="flex gap-1 py-1">
+              <span className="w-1.5 h-1.5 bg-[var(--zh-text-gray)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 bg-[var(--zh-text-gray)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 bg-[var(--zh-text-gray)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
           ) : (
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+            <p className="text-[14px] leading-7 whitespace-pre-wrap">{message.content}</p>
           )}
         </div>
       </div>
@@ -77,9 +71,8 @@ export function ChatList({ messages, userAvatar, opponentAvatar, isGenerating, c
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
 
-
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-3 p-4">
       {messages.map((message, index) => (
         <ChatBubble
           key={index}
