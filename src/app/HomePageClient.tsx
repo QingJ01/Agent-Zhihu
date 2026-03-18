@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Question } from '@/types/zhihu';
 import { QuestionCard } from '@/components/QuestionCard';
 import { DebateFeedCard, DebateFeedItem } from '@/components/DebateFeedCard';
+import { RoundtableFeedCard, RoundtableFeedItem } from '@/components/RoundtableFeedCard';
 import { HotList } from '@/components/HotList';
 import { TagCloud } from '@/components/TagCloud';
 import { CreatorCenter } from '@/components/CreatorCenter';
@@ -14,11 +15,12 @@ import { AppHeader } from '@/components/AppHeader';
 import { openLoginModal } from '@/lib/loginModal';
 import { toast } from '@/components/Toast';
 
-type TabType = 'recommend' | 'hot' | 'new';
+type TabType = 'recommend' | 'hot' | 'new' | 'debate' | 'roundtable';
 type QuestionWithCount = Question & { messageCount?: number; isFavorited?: boolean };
 type FeedItem =
   | (QuestionWithCount & { type: 'question' })
-  | DebateFeedItem;
+  | DebateFeedItem
+  | RoundtableFeedItem;
 
 function extractTagsFromText(text: string): string[] {
   const matches = [...text.matchAll(/#([\u4e00-\u9fa5A-Za-z0-9_-]{1,12})/g)];
@@ -60,6 +62,7 @@ export default function Home() {
   const { data: session } = useSession();
   const [questions, setQuestions] = useState<QuestionWithCount[]>([]);
   const [debates, setDebates] = useState<DebateFeedItem[]>([]);
+  const [roundtables, setRoundtables] = useState<RoundtableFeedItem[]>([]);
   const [questionFavorites, setQuestionFavorites] = useState<Record<string, boolean>>({});
   const [userQuestionTitle, setUserQuestionTitle] = useState('');
   const [userQuestionInput, setUserQuestionInput] = useState('');
@@ -110,14 +113,28 @@ export default function Home() {
     }
   }, []);
 
+  const loadRoundtablesFromServer = useCallback(async () => {
+    try {
+      const response = await fetch('/api/roundtable/feed?limit=20');
+      if (response.ok) {
+        const items: RoundtableFeedItem[] = await response.json();
+        setRoundtables(items);
+      }
+    } catch (error) {
+      console.error('Failed to load roundtables for feed:', error);
+    }
+  }, []);
+
   // 初始加载：优先从服务器加载
   useEffect(() => {
     loadQuestionsFromServer(searchQuery);
     loadDebatesFromServer();
+    loadRoundtablesFromServer();
 
     const onStoreUpdated = () => {
       loadQuestionsFromServer(searchQuery);
       loadDebatesFromServer();
+      loadRoundtablesFromServer();
     };
 
     window.addEventListener('agent-zhihu-store-updated', onStoreUpdated);
@@ -126,13 +143,14 @@ export default function Home() {
     const pollInterval = setInterval(() => {
       loadQuestionsFromServer(searchQuery);
       loadDebatesFromServer();
+      loadRoundtablesFromServer();
     }, 30000); // 30秒
 
     return () => {
       window.removeEventListener('agent-zhihu-store-updated', onStoreUpdated);
       clearInterval(pollInterval);
     };
-  }, [loadQuestionsFromServer, loadDebatesFromServer, searchQuery]);
+  }, [loadQuestionsFromServer, loadDebatesFromServer, loadRoundtablesFromServer, searchQuery]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -163,38 +181,50 @@ export default function Home() {
     return Object.entries(counts).map(([name, count]) => ({ name, count }));
   }, [questions]);
 
-  // 合并问题和辩论到统一 Feed
+  // 合并问题、辩论、圆桌到统一 Feed
   const sortedFeed = useMemo(() => {
+    // "辩论" tab: 只显示辩论
+    if (activeTab === 'debate') {
+      return [...debates].sort((a, b) => b.createdAt - a.createdAt);
+    }
+    // "圆桌" tab: 只显示圆桌
+    if (activeTab === 'roundtable') {
+      return [...roundtables].sort((a, b) => b.createdAt - a.createdAt);
+    }
+
     const filteredQuestions: FeedItem[] = (filterTag
       ? (questions || []).filter((q: QuestionWithCount) => q.tags?.includes(filterTag))
       : (questions || [])
     ).map((q) => ({ ...q, type: 'question' as const }));
 
-    // 搜索或标签筛选时不显示辩论
-    const debateItems: FeedItem[] = (filterTag || searchQuery.trim()) ? [] : debates;
+    // 搜索或标签筛选时不显示辩论和圆桌
+    const isFiltering = filterTag || searchQuery.trim();
+    const debateItems: FeedItem[] = isFiltering ? [] : debates;
+    const roundtableItems: FeedItem[] = isFiltering ? [] : roundtables;
 
-    const allItems = [...filteredQuestions, ...debateItems];
+    const allItems = [...filteredQuestions, ...debateItems, ...roundtableItems];
+
+    const getHeat = (item: FeedItem): number => {
+      if (item.type === 'question') return (item.upvotes || 0) * 2 + (item.messageCount || 0);
+      if (item.type === 'debate') return item.roundCount * 3;
+      if (item.type === 'roundtable') return item.experts.length * 2 + item.roundCount * 2;
+      return 0;
+    };
 
     switch (activeTab) {
       case 'hot':
-        return allItems.sort((a, b) => {
-          const heatA = a.type === 'question' ? (a.upvotes || 0) * 2 + (a.messageCount || 0) : a.roundCount * 3;
-          const heatB = b.type === 'question' ? (b.upvotes || 0) * 2 + (b.messageCount || 0) : b.roundCount * 3;
-          return heatB - heatA;
-        });
+        return allItems.sort((a, b) => getHeat(b) - getHeat(a));
       case 'new':
         return allItems.sort((a, b) => b.createdAt - a.createdAt);
       default:
         // recommend: 混合热度和新鲜度
         return allItems.sort((a, b) => {
-          const heatA = a.type === 'question' ? (a.upvotes || 0) * 2 + (a.messageCount || 0) : a.roundCount * 3;
-          const heatB = b.type === 'question' ? (b.upvotes || 0) * 2 + (b.messageCount || 0) : b.roundCount * 3;
           const ageA = (Date.now() - a.createdAt) / 3600000;
           const ageB = (Date.now() - b.createdAt) / 3600000;
-          return (heatB / (ageB + 1)) - (heatA / (ageA + 1));
+          return (getHeat(b) / (ageB + 1)) - (getHeat(a) / (ageA + 1));
         });
     }
-  }, [questions, debates, activeTab, filterTag, searchQuery]);
+  }, [questions, debates, roundtables, activeTab, filterTag, searchQuery]);
 
   const handleQuestionLikeChange = useCallback(
     (questionId: string, payload: { liked: boolean; downvoted: boolean; upvotes: number; downvotes: number }) => {
@@ -357,6 +387,8 @@ export default function Home() {
     { key: 'recommend', label: '推荐' },
     { key: 'hot', label: '热榜' },
     { key: 'new', label: '最新' },
+    { key: 'debate', label: '辩论' },
+    { key: 'roundtable', label: '圆桌' },
   ];
 
   return (
@@ -654,20 +686,32 @@ export default function Home() {
                 </div>
               ) : (
                 <div>
-                  {sortedFeed.map((item: FeedItem) =>
-                    item.type === 'debate' ? (
-                      <DebateFeedCard
-                        key={`debate-${item.id}`}
-                        debate={item}
-                        currentUserId={session?.user?.id}
-                        onVoteChange={handleDebateVoteChange}
-                      />
-                    ) : (
-                      <div key={item.id} id={`question-${item.id}`}>
-                        <QuestionCard
-                          question={item}
+                  {sortedFeed.map((item: FeedItem) => {
+                    if (item.type === 'debate') {
+                      return (
+                        <DebateFeedCard
+                          key={`debate-${item.id}`}
+                          debate={item}
                           currentUserId={session?.user?.id}
-                          isFavorited={!!questionFavorites[item.id]}
+                          onVoteChange={handleDebateVoteChange}
+                        />
+                      );
+                    }
+                    if (item.type === 'roundtable') {
+                      return (
+                        <RoundtableFeedCard
+                          key={`roundtable-${item.id}`}
+                          roundtable={item}
+                        />
+                      );
+                    }
+                    const q = item as QuestionWithCount & { type: 'question' };
+                    return (
+                      <div key={q.id} id={`question-${q.id}`}>
+                        <QuestionCard
+                          question={q}
+                          currentUserId={session?.user?.id}
+                          isFavorited={!!questionFavorites[q.id]}
                           onVoteChange={handleQuestionLikeChange}
                           onFavoriteChange={handleQuestionFavoriteChange}
                           onTagClick={(tag) => {
@@ -679,8 +723,8 @@ export default function Home() {
                           }}
                         />
                       </div>
-                    )
-                  )}
+                    );
+                  })}
                 </div>
               )}
             </div>
