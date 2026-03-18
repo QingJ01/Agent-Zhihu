@@ -57,6 +57,8 @@ export default function TuringGame({ questionId }: Props) {
   const [game, setGame] = useState<TuringGameData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [canStart, setCanStart] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [votingId, setVotingId] = useState<string | null>(null);
   const [showRevealAnim, setShowRevealAnim] = useState(false);
   const [revealedEntries, setRevealedEntries] = useState<Set<string>>(new Set());
@@ -65,13 +67,15 @@ export default function TuringGame({ questionId }: Props) {
     try {
       const res = await fetch(`/api/turing/${questionId}`);
       if (!res.ok) {
-        const data = await res.json();
-        if (data.error) setError(data.error);
+        const data = await res.json().catch(() => null);
+        if (data?.error) setError(data.error);
         setGame(null);
         return;
       }
       const data = await res.json();
       setGame(data.game);
+      setCanStart(!!data.canStart);
+      if (data.game) setError(null);
     } catch {
       setError('加载失败');
     } finally {
@@ -79,16 +83,36 @@ export default function TuringGame({ questionId }: Props) {
     }
   }, [questionId]);
 
+  const startGame = async () => {
+    if (!session?.user) { openLoginModal(); return; }
+    setStarting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/turing/${questionId}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || '开启失败'); return; }
+      setGame(data.game);
+      setCanStart(false);
+    } catch {
+      setError('开启失败，请稍后重试');
+    } finally {
+      setStarting(false);
+    }
+  };
+
   useEffect(() => { fetchGame(); }, [fetchGame]);
 
   useEffect(() => {
     if (!game || game.status !== 'active') return;
+    // Poll every 15s to show vote count updates (simulated votes trickle in)
     const timer = setInterval(() => {
       if (new Date(game.revealAt).getTime() <= Date.now()) {
         fetchGame();
         clearInterval(timer);
+      } else {
+        fetchGame();
       }
-    }, 30000);
+    }, 15000);
     return () => clearInterval(timer);
   }, [game, fetchGame]);
 
@@ -148,12 +172,29 @@ export default function TuringGame({ questionId }: Props) {
     );
   }
 
-  // Error / No game
-  if (error || !game) {
+  // No game — show start button or error
+  if (!game) {
     return (
-      <div className="bg-white p-5 border border-[var(--zh-border)] rounded-[2px]">
-        <p className="text-[14px] font-medium text-[var(--zh-text-main)] mb-1">盲猜人机</p>
-        <p className="text-[13px] text-[var(--zh-text-gray)]">{error || '该问题暂未开启盲猜'}</p>
+      <div className="bg-white border border-[var(--zh-border)] rounded-[2px]">
+        <div className="py-12 px-5 text-center">
+          <div className="w-14 h-14 mx-auto mb-3 bg-[var(--zh-bg)] rounded-full flex items-center justify-center text-[24px]">🕵️</div>
+          <p className="text-[16px] font-medium text-[var(--zh-text-main)] mb-1">盲猜人机</p>
+          {error && <p className="text-[13px] text-[#FF4D4F] mb-3">{error}</p>}
+          {canStart ? (
+            <>
+              <p className="text-[14px] text-[var(--zh-text-gray)] mb-4">隐藏所有回答的身份，看看你能否分辨 AI 和真人</p>
+              <button
+                onClick={startGame}
+                disabled={starting}
+                className="px-5 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] text-[14px] font-medium hover:bg-[var(--zh-blue-hover)] transition-colors disabled:opacity-50"
+              >
+                {starting ? '开启中...' : '开启盲猜'}
+              </button>
+            </>
+          ) : (
+            <p className="text-[14px] text-[var(--zh-text-gray)]">{error || '该问题回答数不足，暂无法开启盲猜'}</p>
+          )}
+        </div>
       </div>
     );
   }

@@ -39,7 +39,31 @@ export default function QuestionPage({ params }: PageProps) {
     const [questionFavorited, setQuestionFavorited] = useState(false);
     const [replyTarget, setReplyTarget] = useState<DiscussionMessage | null>(null);
     const [activeTab, setActiveTab] = useState<'answers' | 'graph' | 'turing'>('answers');
+    const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const [startingTuring, setStartingTuring] = useState(false);
     const commentSectionRef = useRef<HTMLDivElement | null>(null);
+    const moreMenuRef = useRef<HTMLDivElement | null>(null);
+
+    // Close more menu on outside click
+    useEffect(() => {
+        if (!showMoreMenu) return;
+        const handler = (e: MouseEvent) => {
+            if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) setShowMoreMenu(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showMoreMenu]);
+
+    const handleStartTuring = async () => {
+        setShowMoreMenu(false);
+        if (!session?.user) { window.dispatchEvent(new Event('open-login-modal')); return; }
+        setStartingTuring(true);
+        try {
+            const res = await fetch(`/api/turing/${id}`, { method: 'POST' });
+            if (res.ok) setActiveTab('turing');
+        } catch { /* ignore */ }
+        finally { setStartingTuring(false); }
+    };
 
     const loadHotQuestions = useCallback(async () => {
         try {
@@ -441,7 +465,28 @@ export default function QuestionPage({ params }: PageProps) {
                                     <button onClick={scrollToComment} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Comment size={16} /> {messages.length} 条评论</button>
                                     <button onClick={handleShare} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Share size={16} /> 分享</button>
                                     <button onClick={handleQuestionFavorite} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.Favorite size={16} filled={questionFavorited} /> {questionFavorited ? '已收藏' : '收藏'}</button>
-                                    <button className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.More size={16} /></button>
+                                    <div className="relative" ref={moreMenuRef}>
+                                        <button onClick={() => setShowMoreMenu(v => !v)} className="flex items-center gap-1 hover:text-[var(--zh-text-secondary)]"><Icons.More size={16} /></button>
+                                        {showMoreMenu && (
+                                            <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-[3px] shadow-lg border border-[var(--zh-border)] py-1 z-50">
+                                                {messages.length >= 3 && (
+                                                    <button
+                                                        onClick={handleStartTuring}
+                                                        disabled={startingTuring}
+                                                        className="w-full text-left px-3 py-2 text-[13px] text-[var(--zh-text-main)] hover:bg-[var(--zh-bg)] transition-colors disabled:opacity-50"
+                                                    >
+                                                        {startingTuring ? '开启中...' : '开启盲猜人机'}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => { setShowMoreMenu(false); handleShare(); }}
+                                                    className="w-full text-left px-3 py-2 text-[13px] text-[var(--zh-text-main)] hover:bg-[var(--zh-bg)] transition-colors"
+                                                >
+                                                    复制链接
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
