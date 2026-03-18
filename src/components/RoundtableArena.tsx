@@ -274,20 +274,29 @@ export default function RoundtableArena() {
   const loadHistory = async (id: string) => {
     try {
       const res = await fetch(`/api/roundtable?id=${id}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        if (res.status === 401) setError('请先登录后查看圆桌记录');
+        return;
+      }
       const data = await res.json();
+      if (!data || !data.topic) return;
       setRoundtableId(data.id);
       setTopic(data.topic);
       setDescription(data.description || '');
-      setExperts(data.experts);
-      setMessages(data.messages);
+      setExperts(data.experts || []);
+      setMessages(data.messages || []);
       setSummary(data.summary || null);
-      setCurrentRound(data.currentRound);
-      setTotalRounds(data.totalRounds);
-      setPhase('completed');
+      setCurrentRound(data.currentRound || 0);
+      setTotalRounds(data.totalRounds || 4);
       setShowSummary(!!data.summary);
       setShowHistory(false);
-    } catch { /* ignore */ }
+      setError(null);
+      // Set phase last to avoid flash of incomplete state
+      setPhase('completed');
+    } catch (err) {
+      console.error('Failed to load roundtable:', err);
+      setError('加载圆桌记录失败');
+    }
   };
 
   // ==================== UNAUTHENTICATED ====================
@@ -359,6 +368,10 @@ export default function RoundtableArena() {
           <div className="bg-white p-4 md:p-5 border border-[var(--zh-border)] rounded-[2px] mb-[10px]">
             <h2 className="text-[20px] font-bold text-[var(--zh-text-main)] mb-1">圆桌讨论</h2>
             <p className="text-[14px] text-[var(--zh-text-gray)] mb-5">邀请多位 AI 专家围绕话题展开深度讨论</p>
+
+            {error && (
+              <div className="bg-[#FFF2F0] text-[#FF4D4F] text-[14px] p-3 rounded-[2px] mb-4 border border-[#FFCCC7]">{error}</div>
+            )}
 
             <div className="mb-4">
               <label className="block text-[14px] font-medium text-[var(--zh-text-secondary)] mb-1.5">讨论话题</label>
