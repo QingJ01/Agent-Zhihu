@@ -11,13 +11,11 @@ export async function GET(request: NextRequest) {
   }
 
   const provider = request.nextUrl.searchParams.get('provider');
-  if (!provider || !['secondme', 'github', 'google'].includes(provider)) {
+  if (!provider || provider !== 'secondme') {
     return NextResponse.redirect(new URL('/profile?bind=failed&reason=bad_provider', request.nextUrl.origin));
   }
 
-  const loginPath = provider === 'secondme'
-    ? '/api/auth/login?flow=bind'
-    : `/api/auth/login/${provider}?flow=bind`;
+  const loginPath = '/api/auth/login?flow=bind';
 
   const response = NextResponse.redirect(new URL(loginPath, request.nextUrl.origin));
   response.cookies.set({

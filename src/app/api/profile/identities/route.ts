@@ -4,7 +4,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { connectDB } from '@/lib/mongodb';
 import AuthIdentity from '@/models/AuthIdentity';
 
-const ALLOWED_PROVIDERS = ['secondme', 'github', 'google'] as const;
+const ALLOWED_PROVIDERS = ['secondme'] as const;
 type Provider = typeof ALLOWED_PROVIDERS[number];
 
 function isProvider(value: string): value is Provider {

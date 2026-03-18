@@ -31,11 +31,7 @@ export function LoginButton() {
   }
 
   if (session?.user) {
-    const providerLabel = session.user.provider === 'github'
-      ? 'GitHub'
-      : session.user.provider === 'google'
-        ? 'Google'
-        : 'SecondMe';
+    const providerLabel = 'SecondMe';
 
     return (
       <div className="flex items-center gap-4">

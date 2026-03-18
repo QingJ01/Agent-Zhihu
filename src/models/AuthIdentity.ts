@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export type AuthProvider = 'secondme' | 'github' | 'google';
+export type AuthProvider = 'secondme';
 
 export interface IAuthIdentity extends Document {
   provider: AuthProvider;

@@ -22,7 +22,7 @@ interface ProfileStats {
   favorites: number;
 }
 
-type ProviderKey = 'secondme' | 'github' | 'google';
+type ProviderKey = 'secondme';
 
 interface EditableProfile {
   displayName: string;
@@ -57,13 +57,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [boundProviders, setBoundProviders] = useState<Record<ProviderKey, boolean>>({
     secondme: false,
-    github: false,
-    google: false,
   });
   const [canUnbindProviders, setCanUnbindProviders] = useState<Record<ProviderKey, boolean>>({
     secondme: false,
-    github: false,
-    google: false,
   });
   const [bindStatusMessage, setBindStatusMessage] = useState<string>('');
   const [unbindLoadingProvider, setUnbindLoadingProvider] = useState<ProviderKey | null>(null);
@@ -134,15 +130,11 @@ export default function ProfilePage() {
     if (data?.bound) {
       setBoundProviders({
         secondme: !!data.bound.secondme,
-        github: !!data.bound.github,
-        google: !!data.bound.google,
       });
     }
     if (data?.canUnbind) {
       setCanUnbindProviders({
         secondme: !!data.canUnbind.secondme,
-        github: !!data.canUnbind.github,
-        google: !!data.canUnbind.google,
       });
     }
   };
@@ -180,7 +172,7 @@ export default function ProfilePage() {
     const provider = params.get('provider');
 
     if (bind === 'success') {
-      const providerLabel = provider === 'github' ? 'GitHub' : provider === 'google' ? 'Google' : 'SecondMe';
+      const providerLabel = 'SecondMe';
       setBindStatusMessage(`绑定成功：${providerLabel}`);
       return;
     }

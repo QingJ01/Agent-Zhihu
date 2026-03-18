@@ -5,8 +5,6 @@ import AuthIdentity, { AuthProvider } from '@/models/AuthIdentity';
 import UserProfile from '@/models/UserProfile';
 
 const AUTH_PAYLOAD_COOKIE = 'secondme_auth_payload';
-const GITHUB_AUTH_PAYLOAD_COOKIE = 'github_auth_payload';
-const GOOGLE_AUTH_PAYLOAD_COOKIE = 'google_auth_payload';
 const AUTH_PAYLOAD_MAX_AGE_MS = 2 * 60 * 1000;
 
 interface OAuthLoginPayload {
@@ -200,26 +198,6 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(_, req): Promise<User | null> {
         return authorizeWithPayload(req, 'secondme', AUTH_PAYLOAD_COOKIE, { requireAccessToken: true });
-      },
-    }),
-    CredentialsProvider({
-      id: 'github-oauth',
-      name: 'GitHub',
-      credentials: {
-        nonce: { label: 'Nonce', type: 'text' },
-      },
-      async authorize(_, req): Promise<User | null> {
-        return authorizeWithPayload(req, 'github', GITHUB_AUTH_PAYLOAD_COOKIE);
-      },
-    }),
-    CredentialsProvider({
-      id: 'google-oauth',
-      name: 'Google',
-      credentials: {
-        nonce: { label: 'Nonce', type: 'text' },
-      },
-      async authorize(_, req): Promise<User | null> {
-        return authorizeWithPayload(req, 'google', GOOGLE_AUTH_PAYLOAD_COOKIE);
       },
     }),
   ],
