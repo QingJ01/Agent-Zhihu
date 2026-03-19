@@ -201,7 +201,7 @@ export default function OpinionGraphView({ questionId }: Props) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm p-8">
+      <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-8">
         <div className="flex flex-col items-center justify-center gap-4 py-12">
           <div className="w-12 h-12 border-4 border-gray-200 border-t-[var(--zh-blue)] rounded-full animate-spin" />
           <p className="text-sm text-[var(--zh-text-gray)]">正在分析观点，生成图谱...</p>
@@ -212,7 +212,7 @@ export default function OpinionGraphView({ questionId }: Props) {
 
   if (error) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm p-8">
+      <div className="bg-white rounded-[2px] border border-[var(--zh-border)] p-8">
         <div className="text-center py-8">
           <p className="text-[var(--zh-text-gray)] mb-4">{error}</p>
           <button onClick={fetchGraph} className="px-4 py-2 bg-[var(--zh-blue)] text-white rounded-lg text-sm hover:bg-[var(--zh-blue-hover)]">
@@ -226,7 +226,7 @@ export default function OpinionGraphView({ questionId }: Props) {
   if (nodes.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div className="bg-white rounded-[2px] border border-[var(--zh-border)] overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-[var(--zh-border)]">
         <div className="flex items-center justify-between">

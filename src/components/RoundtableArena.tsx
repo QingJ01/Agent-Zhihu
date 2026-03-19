@@ -305,15 +305,18 @@ export default function RoundtableArena() {
   };
 
   // Auto-load roundtable from URL ?id=xxx
+  // Must wait for session to be ready before fetching (API requires auth)
   useEffect(() => {
     if (initialLoadDone) return;
+    if (sessionStatus === 'loading') return; // Wait for session
+    if (!session?.user) return; // Can't load without auth
     const urlId = searchParams.get('id');
     if (urlId) {
       setInitialLoadDone(true);
       loadHistory(urlId);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, initialLoadDone]);
+  }, [searchParams, initialLoadDone, sessionStatus, session]);
 
   // ==================== LOADING / UNAUTHENTICATED ====================
   if (sessionStatus === 'loading') {

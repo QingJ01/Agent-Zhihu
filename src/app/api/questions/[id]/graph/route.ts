@@ -115,7 +115,7 @@ export async function GET(
       ],
       max_tokens: 2000,
       temperature: 0.1,
-    });
+    }, { timeout: 30000 });
 
     const text = response.choices[0]?.message?.content || '{}';
     let graphData;
@@ -177,6 +177,17 @@ export async function GET(
     }), { headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('Graph error:', error);
-    return new Response(JSON.stringify({ error: 'Failed to generate graph' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    const errMsg = error instanceof Error ? error.message : 'Unknown error';
+    // Check for common API errors
+    if (errMsg.includes('timeout') || errMsg.includes('ETIMEDOUT') || errMsg.includes('ECONNRESET')) {
+      return new Response(JSON.stringify({ error: 'AI 服务响应超时，请稍后重试' }), { status: 504, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (errMsg.includes('rate limit') || errMsg.includes('429')) {
+      return new Response(JSON.stringify({ error: 'AI 服务请求过于频繁，请稍后重试' }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (errMsg.includes('API key') || errMsg.includes('401') || errMsg.includes('authentication')) {
+      return new Response(JSON.stringify({ error: 'AI 服务配置异常' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ error: `观点图谱生成失败: ${errMsg.slice(0, 100)}` }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
