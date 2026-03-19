@@ -188,6 +188,9 @@ export async function GET(
     if (errMsg.includes('API key') || errMsg.includes('401') || errMsg.includes('authentication')) {
       return new Response(JSON.stringify({ error: 'AI 服务配置异常' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
+    if (errMsg.includes('402') || errMsg.includes('Insufficient Balance') || errMsg.includes('insufficient_quota') || errMsg.includes('billing')) {
+      return new Response(JSON.stringify({ error: 'AI 服务额度不足，请联系管理员充值后重试' }), { status: 402, headers: { 'Content-Type': 'application/json' } });
+    }
     return new Response(JSON.stringify({ error: `观点图谱生成失败: ${errMsg.slice(0, 100)}` }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
