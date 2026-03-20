@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { openLoginModal } from '@/lib/loginModal';
 
@@ -63,8 +64,10 @@ const ALL_EXPERTS = [
 ];
 
 export default function RoundtableArena() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
+  const searchParams = useSearchParams();
   const [phase, setPhase] = useState<'setup' | 'running' | 'completed'>('setup');
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [topic, setTopic] = useState('');
   const [description, setDescription] = useState('');
   const [selectedExpertIds, setSelectedExpertIds] = useState<string[]>([]);
@@ -289,6 +292,44 @@ export default function RoundtableArena() {
       setShowHistory(false);
     } catch { /* ignore */ }
   };
+
+  // Auto-load roundtable from URL ?id=xxx
+  // Must wait for session to be ready before fetching (API requires auth)
+  useEffect(() => {
+    if (initialLoadDone) return;
+    if (sessionStatus === 'loading') return;
+    if (!session?.user) return;
+    const urlId = searchParams.get('id');
+    if (urlId) {
+      setInitialLoadDone(true);
+      loadHistory(urlId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, initialLoadDone, sessionStatus, session]);
+
+  // ==================== LOADING ====================
+  if (sessionStatus === 'loading') {
+    return (
+      <div className="max-w-[694px] mx-auto">
+        <div className="bg-white p-8 border border-[var(--zh-border)] rounded-[2px] text-center">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-[var(--zh-blue)] rounded-full animate-spin mx-auto" />
+          <p className="text-[14px] text-[var(--zh-text-gray)] mt-3">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If URL has ?id= and we haven't loaded yet, show loading
+  if (phase === 'setup' && searchParams.get('id') && !initialLoadDone) {
+    return (
+      <div className="max-w-[694px] mx-auto">
+        <div className="bg-white p-8 border border-[var(--zh-border)] rounded-[2px] text-center">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-[var(--zh-blue)] rounded-full animate-spin mx-auto" />
+          <p className="text-[14px] text-[var(--zh-text-gray)] mt-3">正在加载圆桌...</p>
+        </div>
+      </div>
+    );
+  }
 
   // ==================== UNAUTHENTICATED ====================
   if (!session?.user) {
