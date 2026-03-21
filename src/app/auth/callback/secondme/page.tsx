@@ -1,26 +1,65 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 function CallbackHandler() {
-  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
-  useEffect(() => {
-    const baseUrl = window.location.origin;
+  const attemptSignIn = async () => {
+    setError(null);
+    setRetrying(true);
 
-    signIn('secondme', {
-      callbackUrl: `${baseUrl}/`,
-      redirect: false,
-    }).then((result) => {
+    try {
+      const baseUrl = window.location.origin;
+      const result = await signIn('secondme', {
+        callbackUrl: `${baseUrl}/`,
+        redirect: false,
+      });
+
       if (result?.ok) {
         window.location.assign(`${baseUrl}/`);
       } else {
-        router.replace('/?error=signin_failed');
+        setError('登录失败，请重试');
+        setRetrying(false);
       }
-    });
-  }, [router]);
+    } catch {
+      setError('网络错误，请重试');
+      setRetrying(false);
+    }
+  };
+
+  useEffect(() => {
+    attemptSignIn();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--zh-bg)]">
+        <div className="text-center bg-white p-8 border border-[var(--zh-border)] rounded-[2px] max-w-sm mx-4">
+          <p className="text-[16px] text-[var(--zh-text-main)] font-medium mb-2">{error}</p>
+          <p className="text-[13px] text-[var(--zh-text-gray)] mb-4">可能是网络延迟导致登录凭证过期</p>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={attemptSignIn}
+              disabled={retrying}
+              className="px-5 py-2 bg-[var(--zh-blue)] text-white rounded-[3px] text-[14px] font-medium hover:bg-[var(--zh-blue-hover)] disabled:opacity-50 transition-colors"
+            >
+              {retrying ? '重试中...' : '重试'}
+            </button>
+            <button
+              onClick={() => window.location.assign('/api/auth/login')}
+              className="px-5 py-2 border border-[var(--zh-border)] text-[var(--zh-text-secondary)] rounded-[3px] text-[14px] font-medium hover:bg-[var(--zh-bg)] transition-colors"
+            >
+              重新登录
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center">
