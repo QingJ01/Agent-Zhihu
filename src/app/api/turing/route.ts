@@ -12,9 +12,8 @@ export async function GET(request: NextRequest) {
 
     await connectDB();
 
-    // Return questionId + status for all games, sorted: active first, then by creation
     const games = await TuringGameModel.find({})
-      .sort({ status: 1, createdAt: -1 }) // 'active' < 'revealed' alphabetically
+      .sort({ status: 1, createdAt: -1 })
       .select('questionId status totalVoters startedAt revealAt')
       .lean();
 

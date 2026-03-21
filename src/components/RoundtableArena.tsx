@@ -96,14 +96,12 @@ export default function RoundtableArena() {
     return EXPERT_COLORS[idx >= 0 ? idx % EXPERT_COLORS.length : 0];
   }, [experts]);
 
-  // Load history list
   useEffect(() => {
     fetch('/api/roundtable?page=1&limit=20')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.roundtables) setHistory(data.roundtables); })
       .catch(() => {});
   }, []);
-
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -279,37 +277,28 @@ export default function RoundtableArena() {
   const loadHistory = async (id: string) => {
     try {
       const res = await fetch(`/api/roundtable?id=${id}`);
-      if (!res.ok) {
-        if (res.status === 401) setError('请先登录后查看圆桌记录');
-        return;
-      }
+      if (!res.ok) return;
       const data = await res.json();
-      if (!data || !data.topic) return;
       setRoundtableId(data.id);
       setTopic(data.topic);
       setDescription(data.description || '');
-      setExperts(data.experts || []);
-      setMessages(data.messages || []);
+      setExperts(data.experts);
+      setMessages(data.messages);
       setSummary(data.summary || null);
-      setCurrentRound(data.currentRound || 0);
-      setTotalRounds(data.totalRounds || 4);
+      setCurrentRound(data.currentRound);
+      setTotalRounds(data.totalRounds);
+      setPhase('completed');
       setShowSummary(!!data.summary);
       setShowHistory(false);
-      setError(null);
-      // Set phase last to avoid flash of incomplete state
-      setPhase('completed');
-    } catch (err) {
-      console.error('Failed to load roundtable:', err);
-      setError('加载圆桌记录失败');
-    }
+    } catch { /* ignore */ }
   };
 
   // Auto-load roundtable from URL ?id=xxx
   // Must wait for session to be ready before fetching (API requires auth)
   useEffect(() => {
     if (initialLoadDone) return;
-    if (sessionStatus === 'loading') return; // Wait for session
-    if (!session?.user) return; // Can't load without auth
+    if (sessionStatus === 'loading') return;
+    if (!session?.user) return;
     const urlId = searchParams.get('id');
     if (urlId) {
       setInitialLoadDone(true);
@@ -318,7 +307,7 @@ export default function RoundtableArena() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, initialLoadDone, sessionStatus, session]);
 
-  // ==================== LOADING / UNAUTHENTICATED ====================
+  // ==================== LOADING ====================
   if (sessionStatus === 'loading') {
     return (
       <div className="max-w-[694px] mx-auto">
@@ -330,6 +319,19 @@ export default function RoundtableArena() {
     );
   }
 
+  // If URL has ?id= and we haven't loaded yet, show loading
+  if (phase === 'setup' && searchParams.get('id') && !initialLoadDone) {
+    return (
+      <div className="max-w-[694px] mx-auto">
+        <div className="bg-white p-8 border border-[var(--zh-border)] rounded-[2px] text-center">
+          <div className="w-5 h-5 border-2 border-gray-300 border-t-[var(--zh-blue)] rounded-full animate-spin mx-auto" />
+          <p className="text-[14px] text-[var(--zh-text-gray)] mt-3">正在加载圆桌...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ==================== UNAUTHENTICATED ====================
   if (!session?.user) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-[694px_296px] gap-[10px]">
@@ -389,18 +391,6 @@ export default function RoundtableArena() {
   }
 
   // ==================== SETUP PHASE ====================
-  // If URL has ?id=, show loading while we fetch
-  if (phase === 'setup' && searchParams.get('id') && !initialLoadDone) {
-    return (
-      <div className="max-w-[694px] mx-auto">
-        <div className="bg-white p-8 border border-[var(--zh-border)] rounded-[2px] text-center">
-          <div className="w-5 h-5 border-2 border-gray-300 border-t-[var(--zh-blue)] rounded-full animate-spin mx-auto" />
-          <p className="text-[14px] text-[var(--zh-text-gray)] mt-3">正在加载圆桌...</p>
-        </div>
-      </div>
-    );
-  }
-
   if (phase === 'setup') {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-[694px_296px] gap-[10px]">
@@ -410,10 +400,6 @@ export default function RoundtableArena() {
           <div className="bg-white p-4 md:p-5 border border-[var(--zh-border)] rounded-[2px] mb-[10px]">
             <h2 className="text-[20px] font-bold text-[var(--zh-text-main)] mb-1">圆桌讨论</h2>
             <p className="text-[14px] text-[var(--zh-text-gray)] mb-5">邀请多位 AI 专家围绕话题展开深度讨论</p>
-
-            {error && (
-              <div className="bg-[#FFF2F0] text-[#FF4D4F] text-[14px] p-3 rounded-[2px] mb-4 border border-[#FFCCC7]">{error}</div>
-            )}
 
             <div className="mb-4">
               <label className="block text-[14px] font-medium text-[var(--zh-text-secondary)] mb-1.5">讨论话题</label>

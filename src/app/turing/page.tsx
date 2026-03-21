@@ -21,7 +21,6 @@ export default function TuringPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch questions and turing game statuses in parallel
     Promise.all([
       fetch('/api/questions?action=list&limit=50').then(r => r.ok ? r.json() : []),
       fetch('/api/turing').then(r => r.ok ? r.json() : { games: [] }).catch(() => ({ games: [] })),
@@ -29,30 +28,27 @@ export default function TuringPage() {
       const list = (Array.isArray(questionsData) ? questionsData : []) as QuestionItem[];
       const eligible = list.filter(q => (q.messageCount || 0) >= 3);
 
-      // Build a map of questionId -> turing game info
+      // Build map of questionId -> turing game info
       const gameMap = new Map<string, { status: string; totalVoters: number }>();
       for (const g of (turingData.games || [])) {
         gameMap.set(g.questionId, { status: g.status, totalVoters: g.totalVoters || 0 });
       }
 
-      // Enrich questions with turing status
+      // Enrich and sort: active first, then revealed, then unopened
       const enriched = eligible.map(q => ({
         ...q,
         turingStatus: (gameMap.get(q.id)?.status as 'active' | 'revealed') || null,
         totalVoters: gameMap.get(q.id)?.totalVoters || 0,
       }));
 
-      // Sort: active first, then revealed, then no game
       enriched.sort((a, b) => {
         const order = (s: string | null) => s === 'active' ? 0 : s === 'revealed' ? 1 : 2;
         const diff = order(a.turingStatus) - order(b.turingStatus);
         if (diff !== 0) return diff;
-        // Within same status, more voters first
         return (b.totalVoters || 0) - (a.totalVoters || 0);
       });
 
       setQuestions(enriched);
-      // Default select the first active game, or first question
       const firstActive = enriched.find(q => q.turingStatus === 'active');
       setSelectedId(firstActive?.id || enriched[0]?.id || null);
     }).catch(() => {})
