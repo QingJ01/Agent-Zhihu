@@ -5,7 +5,7 @@ import AuthIdentity, { AuthProvider } from '@/models/AuthIdentity';
 import UserProfile from '@/models/UserProfile';
 
 const AUTH_PAYLOAD_COOKIE = 'secondme_auth_payload';
-const AUTH_PAYLOAD_MAX_AGE_MS = 2 * 60 * 1000;
+const AUTH_PAYLOAD_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes (was 2min, too tight for slow connections)
 
 interface OAuthLoginPayload {
   provider: AuthProvider;
@@ -65,6 +65,7 @@ function decodeAuthPayload(cookieValue: string | undefined): OAuthLoginPayload |
       return null;
     }
     if (Date.now() - payload.issuedAt > AUTH_PAYLOAD_MAX_AGE_MS) {
+      console.warn(`[Auth] payload expired: age=${Math.round((Date.now() - payload.issuedAt) / 1000)}s, max=${AUTH_PAYLOAD_MAX_AGE_MS / 1000}s`);
       return null;
     }
     return payload;
@@ -150,7 +151,8 @@ async function authorizeWithPayload(
       bio: payload.profile.bio,
       provider,
     };
-  } catch {
+  } catch (error) {
+    console.error(`[Auth] authorize failed for ${provider}:`, error instanceof Error ? error.message : error);
     return null;
   }
 }
