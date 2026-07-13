@@ -2,7 +2,7 @@
 name: secondme
 description: 一站式创建 SecondMe 集成项目，依次执行初始化、需求定义、项目生成
 user-invocable: true
-argument-hint: [--quick]
+argument-hint: "[--quick]"
 ---
 
 # SecondMe 一站式项目创建
