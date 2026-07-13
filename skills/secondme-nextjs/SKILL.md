@@ -2,7 +2,7 @@
 name: secondme-nextjs
 description: 基于配置和需求生成 Next.js 项目，支持 --quick 快速模式跳过 PRD 阶段
 user-invocable: true
-argument-hint: [--quick]
+argument-hint: "[--quick]"
 ---
 
 # SecondMe Next.js 项目生成
